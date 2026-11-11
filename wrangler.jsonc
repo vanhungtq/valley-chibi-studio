@@ -13,8 +13,8 @@
     "GITHUB_ALLOWED_LOGINS": "",
     "GITHUB_ALLOWED_IDS": ""
   },
-  // Wrangler/Deploy to Cloudflare can provision missing IDs on first deploy.
-  // For existing resources, add their database_id/id/bucket_name here.
+  // deploy:cloudflare reuses existing D1/KV resources by exact default name.
+  // Explicit database_id/id values take precedence, including custom-named resources.
   "d1_databases": [{"binding": "DB", "database_name": "valley-chibi-studio", "migrations_dir": "drizzle"}],
   // Workers Free: file contents and OAuth records use separate KV namespaces.
   "kv_namespaces": [{"binding": "OAUTH_KV"}, {"binding": "FILES_KV"}]

@@ -6,7 +6,7 @@
 
 Workers & Pages → Create application → Continue with GitHub → chọn repo vanhungtq/valley-chibi-studio.
 
-Dùng nhánh main sau khi bản Workers KV Free được merge. Không chọn Continue to Pages hoặc Upload static files: app cần Worker API và MCP.
+Dùng nhánh main. Không chọn Continue to Pages hoặc Upload static files: app cần Worker API và MCP.
 
 Root directory: /
 Build command: npm run build:cloudflare
@@ -23,7 +23,9 @@ wrangler.jsonc khai báo:
 - KV binding OAUTH_KV — dữ liệu OAuth và phiên đăng nhập.
 - Assets binding ASSETS — thư mục public/.
 
-Wrangler có thể tạo D1 và các KV namespace còn thiếu trong lần deploy đầu. Cấu hình không còn `r2_buckets`, nên không có bước tìm hoặc tạo R2 bucket. Nếu đã có resource, điền database_id/id thực tế vào đúng binding trong wrangler.jsonc. Không dùng ID của tài khoản khác.
+Script `npm run deploy:cloudflare` kiểm tra tài nguyên trong tài khoản Cloudflare đang xác thực trước khi deploy. Khi cấu hình chưa có ID, script dùng lại D1 có đúng `database_name` và KV có đúng tên mặc định của Wrangler: `valley-chibi-studio-oauth-kv` và `valley-chibi-studio-files-kv`. ID được gắn vào cấu hình trong môi trường build; không tự commit lên GitHub. Vì vậy, retry sau lần deploy lỗi vẫn dùng đúng kho đã tạo, tránh lỗi KV `10014` (namespace cùng tên đã tồn tại). ID đã khai báo được giữ nguyên. Nếu không đọc được danh sách tài nguyên, script dừng và giữ thông báo lỗi, không coi đó là kho chưa tồn tại.
+
+Wrangler chỉ provision các binding vẫn chưa có tài nguyên. Cấu hình không còn `r2_buckets`, nên không có bước tìm hoặc tạo R2 bucket. Với kho đặt tên riêng, điền database_id/id thực tế vào đúng binding trong wrangler.jsonc. Không dùng ID của tài khoản khác. Không xóa namespace OAuth để xử lý lỗi trùng tên.
 
 Nếu muốn tạo bằng giao diện giống ảnh đã gửi: Storage & databases → Workers KV → Create namespace. Tạo kho tệp và kho OAuth riêng; trong binding của Worker, dùng đúng tên biến `FILES_KV` và `OAUTH_KV`. Ghi ID namespace thực tế vào `wrangler.jsonc` để các lần deploy tiếp theo dùng cùng kho:
 
@@ -40,7 +42,7 @@ KV có thể cần 60 giây hoặc hơn để dữ liệu hiện ở khu vực k
 
 Nếu đã có file trong R2, bản này không tự copy hoặc xóa chúng. Sao lưu/di chuyển file trước khi bỏ binding cũ; không xóa bucket để thử. Bản Sites tùy chọn vẫn dùng binding R2 của Sites.
 
-Lệnh deploy tự áp dụng toàn bộ drizzle/*.sql qua binding DB. Lần đầu chưa có database_id, script deploy Worker để provision resource trước rồi chạy migration. Khi có database_id, migration chạy trước bản code mới. Không sửa hoặc xóa migration đã áp dụng. Sau lần đầu, lưu các ID resource thực tế vào GitHub để các lần build tiếp theo sử dụng đúng kho.
+Lệnh deploy tự áp dụng toàn bộ drizzle/*.sql qua binding DB. Khi tìm thấy D1 đã có (hoặc đã ghim database_id), migration chạy trước bản code mới; nếu migration lỗi thì không deploy code mới. Với database hoàn toàn mới, script deploy để provision trước, tìm lại ID rồi chạy migration. Không sửa hoặc xóa migration đã áp dụng. Có thể lưu các ID resource thực tế vào GitHub để ghim kho và bỏ qua bước tra cứu ở các lần build sau.
 
 Chỉ cho nhánh production triển khai production. Tắt automatic deploy nhánh thử nghiệm, hoặc dùng Worker/D1/KV riêng cho staging; không chạy migration production từ preview PR.
 
