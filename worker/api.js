@@ -98,7 +98,7 @@ export const outputSchema={type:'object',properties:{title:STR,summary:STR,conte
 export async function handleApi(request,env){
  try{
  const url=new URL(request.url),path=url.pathname,owner=userOf(request);
- if(path==='/api/config'&&request.method==='GET')return json({executionMode:'codex',externalModelCalls:false,bridgeReady:!!env.DB&&!!env.BUCKET,storageReady:!!env.DB&&!!env.BUCKET,signedIn:!!owner,displayName:clean(request.headers.get('oai-authenticated-user-full-name')||request.headers.get('oai-authenticated-user-email')||'Nhà sáng tạo')});
+ if(path==='/api/config'&&request.method==='GET')return json({executionMode:'codex',externalModelCalls:false,bridgeReady:!!env.DB&&!!env.BUCKET,storageReady:!!env.DB&&!!env.BUCKET,signedIn:!!owner,displayName:clean(request.headers.get('oai-authenticated-user-full-name')||request.headers.get('oai-authenticated-user-email')||'Nhà sáng tạo'),storageProvider:env.FILE_STORAGE_DRIVER||'r2',maxUploadBytes:env.FILE_MAX_BYTES||MAX_FILE});
  if(!owner)throw fail(401,'Vui lòng đăng nhập để mở dự án.');
  if(!env.DB||!env.BUCKET)throw fail(503,'Kho lưu trữ của studio chưa sẵn sàng.');
  if(path.startsWith('/api/tasks'))return handleTasks(request,env,owner);
@@ -110,10 +110,11 @@ export async function handleApi(request,env){
   }
  }
  if(path==='/api/files'&&request.method==='POST'){
-  if(Number(request.headers.get('content-length')||0)>MAX_FILE+8192)throw fail(413,'Mỗi tệp tối đa 30 MB.');
+  const maxFile=env.FILE_MAX_BYTES||MAX_FILE,limitMiB=Math.floor(maxFile/1024/1024);
+  if(Number(request.headers.get('content-length')||0)>maxFile+8192)throw fail(413,'Mỗi tệp tối đa '+limitMiB+' MiB.');
   const data=await request.formData(),file=data.get('file');
   if(!file||typeof file==='string')throw fail(400,'Chưa có tệp tải lên.');
-  if(file.size>MAX_FILE||!file.size)throw fail(413,'Tệp phải lớn hơn 0 và không quá 30 MB.');
+  if(file.size>maxFile||!file.size)throw fail(413,'Tệp phải lớn hơn 0 và không quá '+limitMiB+' MiB.');
   let mime=file.type;if(!mime&&/\.(md|txt)$/i.test(file.name))mime=file.name.endsWith('.md')?'text/markdown':'text/plain';
   if(!mimeTypes.has(mime))throw fail(415,'Hỗ trợ JPG, PNG, WebP, AVIF, PDF, TXT, MD và video MP4/MOV.');
   const id=crypto.randomUUID(),key='users/'+encodeURIComponent(owner)+'/'+id;
@@ -125,7 +126,7 @@ export async function handleApi(request,env){
   const key='users/'+encodeURIComponent(owner)+'/'+id;
   if(request.method==='DELETE'){await env.BUCKET.delete(key);return json({ok:true});}
   if(request.method==='GET'){
-   const object=await env.BUCKET.get(key,request.headers.has('range')?{range:request.headers}:undefined);if(!object)throw fail(404,'Không tìm thấy tệp.');
+   const object=await env.BUCKET.get(key,request.headers.has('range')?{range:request.headers}:undefined);if(!object){if(env.FILE_STORAGE_DRIVER==='kv'){const {state}=await readState(env,owner);const expected=state.assets.some(a=>a.id===id)||state.episodes.some(e=>Object.values(e.outputs).some(o=>(o.artifacts||[]).some(a=>a.id===id)));if(expected)throw Object.assign(fail(503,'Tệp đang đồng bộ trong Workers KV. Hãy chờ rồi thử lại.'),{retryAfter:'5'});}throw fail(404,'Không tìm thấy tệp.');}
    const headers=new Headers({'content-type':object.httpMetadata?.contentType||'application/octet-stream','cache-control':'private, max-age=60','x-content-type-options':'nosniff'});
    headers.set('accept-ranges','bytes');
    const partial=request.headers.has('range')&&object.range&&Number.isFinite(object.range.offset)&&Number.isFinite(object.range.length)&&Number.isFinite(object.size);
@@ -161,5 +162,5 @@ export async function handleApi(request,env){
   }finally{await env.DB.prepare('DELETE FROM run_locks WHERE owner = ? AND episode_id = ? AND token = ?').bind(owner,e.id,token).run();}
  }
  throw fail(404,'Không tìm thấy chức năng này.');
- }catch(error){return json({error:error.status?error.message:'Studio chưa thể xử lý yêu cầu. Hãy thử lại sau.'},error.status||500);}
+ }catch(error){const response=json({error:error.status?error.message:'Studio chưa thể xử lý yêu cầu. Hãy thử lại sau.'},error.status||500);if(error.contentRange)response.headers.set('content-range',error.contentRange);if(error.retryAfter)response.headers.set('retry-after',error.retryAfter);return response;}
 }

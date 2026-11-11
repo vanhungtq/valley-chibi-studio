@@ -2,13 +2,13 @@
 
 Xưởng tiền kỳ YouTube đời sống nông thôn hướng tới khán giả quốc tế: 5 vai trò, giao diện chibi 3D, thư viện theo dự án/tập, kịch bản, storyboard và hồ sơ quay.
 
-**Mọi công việc sáng tạo thực hiện trong Codex.** Xưởng chỉ lưu dữ liệu, giao việc, nhận tiến độ và kết quả qua plugin MCP riêng của Site. Không gọi API mô hình bên ngoài và không cần API key mô hình.
+**Mọi công việc sáng tạo thực hiện trong Codex.** Xưởng lưu dữ liệu, giao việc, nhận tiến độ và kết quả qua MCP. Không gọi API mô hình bên ngoài và không cần API key mô hình.
 
 ## Cài trên Cloudflare từ GitHub
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fvanhungtq%2Fvalley-chibi-studio%2Ftree%2Fcodex%2Fcloudflare-deploy)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fvanhungtq%2Fvalley-chibi-studio%2Ftree%2Fmain)
 
-Chọn **Workers & Pages → Create application → Continue with GitHub**. Dùng nhánh `codex/cloudflare-deploy` để cài bản này trước khi merge vào `main`.
+Chọn **Workers & Pages → Create application → Continue with GitHub**. Dùng nhánh `main` sau khi bản Workers KV Free được merge.
 
 | Mục | Giá trị |
 |---|---|
@@ -17,7 +17,7 @@ Chọn **Workers & Pages → Create application → Continue with GitHub**. Dùn
 | Deploy command | `npm run deploy:cloudflare` |
 | Node.js | 24 |
 | Worker entry | `worker/cloudflare.js` |
-| Lưu trữ | D1 `DB`, R2 `BUCKET`, KV `OAUTH_KV` |
+| Lưu trữ | D1 `DB`, KV `FILES_KV` và KV `OAUTH_KV` |
 | MCP | Remote MCP, **Streamable HTTP**, `https://<domain>/mcp` |
 | Xác thực | **OAuth 2.1 + PKCE**, đăng nhập GitHub, allowlist |
 
@@ -26,6 +26,14 @@ Chọn **Workers & Pages → Create application → Continue with GitHub**. Dùn
 Bản này chạy độc lập với Sites. Tạo GitHub OAuth App với callback `https://<domain>/auth/callback`; đặt `PUBLIC_ORIGIN`, allowlist GitHub và hai secret của OAuth App trong Worker. AI và tạo ảnh vẫn thực hiện trong ChatGPT/Codex qua MCP; không cần khóa API mô hình. Plugin Sites cũ không tự chuyển sang domain Cloudflare. Không dùng Pages static cho bản này.
 
 Sau deploy, kiểm tra `/healthz`, đăng nhập website rồi thêm custom MCP vào ChatGPT/Codex bằng URL `/mcp`. Mục Zero Trust **MCP servers / Server portals** là lớp quản lý/gom server tùy chọn; một Xưởng riêng có thể kết nối thẳng MCP.
+
+## Lưu tệp bằng Workers KV Free
+
+Bản Cloudflare mặc định dùng `FILES_KV`, không khai báo R2 và không yêu cầu tạo bucket. D1 giữ dự án/đầu việc, `OAUTH_KV` giữ phiên đăng nhập, `FILES_KV` giữ nội dung nhị phân của ảnh/tài liệu/video nhỏ. File dùng UUID mới, giới hạn 20 MiB/tệp. Giao diện lấy đúng hạn mức từ máy chủ; đọc video hỗ trợ byte ranges.
+
+Theo [Cloudflare KV pricing](https://developers.cloudflare.com/kv/platform/pricing/), gói Free có 1 GB dữ liệu, 100.000 lượt đọc và 1.000 lượt ghi/ngày. Hạn mức dùng chung tài khoản, gồm cả OAuth và kho tệp; hết quota thì thao tác bị từ chối. KV không dành cho lưu toàn bộ footage video. Video lớn dùng URL tham chiếu và ảnh từng shot.
+
+KV có độ trễ đồng bộ [60 giây hoặc hơn giữa các khu vực](https://developers.cloudflare.com/kv/concepts/how-kv-works/). Ảnh trong giao diện có thử tải lại có giới hạn; Codex cần thử đọc lại nếu tệp mới chưa đồng bộ. Không chuyển project state/claim/duyệt vào KV. Tệp R2 cũ không tự chuyển sang KV và không bị xóa bởi thay đổi này.
 
 ## Cài bằng Sites trong tài khoản ChatGPT khác (tùy chọn)
 
@@ -63,7 +71,7 @@ Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → 
 - Kết quả có schema, ID nguồn hợp lệ, lưu file Codex và dừng chờ người duyệt.
 - Hồ sơ HTML có hình nhúng, in PDF qua trình duyệt, shot list CSV và JSON sao lưu.
 - Tập mẫu có 6 cảnh, 24 shot, 480 giây mục tiêu dựng. Nội dung mẫu được gắn nhãn riêng.
-- Đăng nhập Sites, D1 cho bản ghi, R2 theo tài khoản; JSON sao lưu không chứa file nhị phân.
+- Đăng nhập Sites, D1 cho bản ghi, KV theo tài khoản ở bản Cloudflare Free (R2 ở bản Sites); JSON sao lưu không chứa file nhị phân.
 
 ## Storyboard ChatGPT & thư viện tri thức có hình
 
@@ -73,7 +81,7 @@ Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → 
 - Tri thức → **Thêm kiến thức**: ảnh minh họa kỹ thuật có thể tải trực tiếp, không cần URL. Video mẫu có file MP4/MOV hoặc URL nguồn, kênh/tác giả, ảnh minh họa và tối đa 200 shot theo thứ tự.
 - Mỗi shot reference có timecode, ảnh góc quay, cỡ cảnh, tiêu cự nếu biết, chuyển động và chú thích. Có thể lấy khung hình từ video đã lưu tại vị trí đang dừng, thêm/xóa/đổi thứ tự shot và tìm theo nội dung phân tích.
 - Gói Codex giữ toàn bộ ảnh/video liên kết với reference được chọn, kể cả ngoài 16 tài nguyên gợi ý ban đầu. Ghi rõ số nguồn đã chọn. Agent đọc ảnh thật và dẫn nguồn, học nguyên tắc để vận dụng vào câu chuyện riêng.
-- Giới hạn hiện tại: 30 MB/tệp tải từ giao diện, 5 MB/lượt đọc MCP, 1 MB/file Codex nộp. Video lớn hơn dùng URL và ảnh shot; URL chưa được tự động tải, xem hoặc chép lời. Ghép 4 shot giảm số lần tạo ảnh nhưng không bảo đảm tỷ lệ tiết kiệm token.
+- Giới hạn hiện tại: 20 MiB/tệp tải từ giao diện Cloudflare Free (30 MiB ở Sites), 5 MB/lượt đọc MCP, 1 MB/file Codex nộp. Video lớn hơn dùng URL và ảnh shot; URL chưa được tự động tải, xem hoặc chép lời. Ghép 4 shot giảm số lần tạo ảnh nhưng không bảo đảm tỷ lệ tiết kiệm token.
 
 ## Giao diện sáng/tối và xưởng 3D
 
@@ -104,7 +112,7 @@ Tên công cụ trên phiên ChatGPT/Codex có thể được thêm tiền tố 
 ## Mã nguồn và kiểm tra
 
 ```text
-wrangler.jsonc         Cấu hình Cloudflare Workers + D1/R2/KV/assets
+wrangler.jsonc         Cấu hình Cloudflare Workers + D1/KV/assets
 worker/cloudflare.js   Entry độc lập và kiểm tra danh tính
 worker/cloudflare/     GitHub login, session, consent OAuth
 .github/workflows/     CI Node 24, tests và build
@@ -143,7 +151,7 @@ Lệnh này cần đích chưa tồn tại, ở ngoài checkout. Không chép Gi
 ## Giới hạn thực tế
 
 - Xưởng không tự chạy Codex khi không có phiên nhận việc. Đồng bộ giao diện bằng thăm dò mỗi 5 giây khi mở trang.
-- Tải thư viện tối đa 30 MB/tệp; đọc qua MCP tối đa 5 MB/lượt; file Codex nộp qua MCP tối đa 1 MB/tệp, tuần tự. Chưa có chunk upload.
+- Tải thư viện Cloudflare KV tối đa 20 MiB/tệp (Sites: 30 MiB); đọc qua MCP tối đa 5 MB/lượt; file Codex nộp qua MCP tối đa 1 MB/tệp, tuần tự. Chưa có chunk upload.
 - Xem PDF/video, sinh ảnh và dựng PDF chất lượng cao phụ thuộc công cụ sẵn có trong Codex. Metadata/URL không chứng minh nội dung đã được đọc.
 - Snapshot chọn tài nguyên bằng từ khóa, tối đa 16 file và 10 reference trong phạm vi liên quan. Chưa có OCR/transcript tự động, embeddings hoặc vector database phía máy chủ. Metadata thư viện vẫn nằm trong JSON dự án; bản tổ chức Cloudflare chưa thêm FTS/phân trang riêng.
 - Các frame chưa gắn ảnh dùng sơ đồ SVG minh họa. Không trình bày như storyboard được sinh từ ảnh thật.

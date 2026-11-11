@@ -1,12 +1,12 @@
 # Cài Valley Chibi Studio trên Cloudflare từ GitHub
 
-Đây là bản Workers độc lập: giao diện + API + Remote MCP cùng một Worker, D1 lưu dự án/đầu việc, R2 lưu file, KV lưu phiên đăng nhập và OAuth. Giữ đầy đủ storyboard ảnh ChatGPT, thư viện Reference, Dark Mode và chibi 3D.
+Đây là bản Workers độc lập: giao diện + API + Remote MCP cùng một Worker, D1 lưu dự án/đầu việc, Workers KV `FILES_KV` lưu file, KV `OAUTH_KV` lưu phiên đăng nhập và OAuth. Bản mặc định dùng được với Workers Free trong hạn mức, không cần R2. Giữ đầy đủ storyboard ảnh ChatGPT, thư viện Reference, Dark Mode và chibi 3D.
 
 ## 1. Chọn đúng nơi trong ảnh Cloudflare
 
 Workers & Pages → Create application → Continue with GitHub → chọn repo vanhungtq/valley-chibi-studio.
 
-Dùng nhánh codex/cloudflare-deploy chứa wrangler.jsonc, hoặc main sau khi merge. Không chọn Continue to Pages hoặc Upload static files: app cần Worker API và MCP.
+Dùng nhánh main sau khi bản Workers KV Free được merge. Không chọn Continue to Pages hoặc Upload static files: app cần Worker API và MCP.
 
 Root directory: /
 Build command: npm run build:cloudflare
@@ -19,15 +19,30 @@ Nếu dùng Deploy to Cloudflare button, Cloudflare có thể sao chép repo san
 
 wrangler.jsonc khai báo:
 - D1 binding DB — database mặc định valley-chibi-studio.
-- R2 binding BUCKET — bucket mặc định valley-chibi-studio-files.
+- KV binding FILES_KV — nội dung tệp riêng theo tài khoản, tối đa 20 MiB/tệp.
 - KV binding OAUTH_KV — dữ liệu OAuth và phiên đăng nhập.
 - Assets binding ASSETS — thư mục public/.
 
-Wrangler mới có thể tạo resource còn thiếu trong lần deploy đầu. Cloudflare có thể yêu cầu bật R2/billing trước khi tạo bucket; phí và hạn mức theo tài khoản của bạn. Nếu đã có resource, điền database_id/id/bucket_name thực tế vào đúng binding trong wrangler.jsonc. Không dùng ID của tài khoản khác.
+Wrangler có thể tạo D1 và các KV namespace còn thiếu trong lần deploy đầu. Cấu hình không còn `r2_buckets`, nên không có bước tìm hoặc tạo R2 bucket. Nếu đã có resource, điền database_id/id thực tế vào đúng binding trong wrangler.jsonc. Không dùng ID của tài khoản khác.
+
+Nếu muốn tạo bằng giao diện giống ảnh đã gửi: Storage & databases → Workers KV → Create namespace. Tạo kho tệp và kho OAuth riêng; trong binding của Worker, dùng đúng tên biến `FILES_KV` và `OAUTH_KV`. Ghi ID namespace thực tế vào `wrangler.jsonc` để các lần deploy tiếp theo dùng cùng kho:
+
+```json
+"kv_namespaces": [
+  {"binding": "OAUTH_KV", "id": "ID_NAMESPACE_OAUTH_CUA_BAN"},
+  {"binding": "FILES_KV", "id": "ID_NAMESPACE_FILES_CUA_BAN"}
+]
+```
+
+Free KV có 1 GB lưu trữ, 100.000 lượt đọc/ngày, 1.000 lượt ghi/ngày, 1.000 lượt xóa/ngày và 1.000 lượt list/ngày, dùng chung toàn bộ tài khoản. Khi hết hạn mức, thao tác bị từ chối. Kiểm tra usage trong Dashboard; không coi đây là kho video không giới hạn. Mức của ứng dụng là 20 MiB/tệp, thấp hơn trần 25 MiB/value của KV. File Codex nộp qua MCP vẫn tối đa 1 MiB/file, đọc MCP tối đa 5 MiB/lượt.
+
+KV có thể cần 60 giây hoặc hơn để dữ liệu hiện ở khu vực khác; đọc thiếu tệp mới cần thử lại, không suy đoán nội dung. Giao diện thử tải lại ảnh mới có giới hạn. Video được phục vụ theo byte range nhưng KV đọc nguyên giá trị phía máy chủ, nên video gốc dung lượng lớn nên lưu bằng URL và ảnh shot. Trạng thái dự án, claim và duyệt vẫn ở D1 để giữ kiểm soát đồng thời.
+
+Nếu đã có file trong R2, bản này không tự copy hoặc xóa chúng. Sao lưu/di chuyển file trước khi bỏ binding cũ; không xóa bucket để thử. Bản Sites tùy chọn vẫn dùng binding R2 của Sites.
 
 Lệnh deploy tự áp dụng toàn bộ drizzle/*.sql qua binding DB. Lần đầu chưa có database_id, script deploy Worker để provision resource trước rồi chạy migration. Khi có database_id, migration chạy trước bản code mới. Không sửa hoặc xóa migration đã áp dụng. Sau lần đầu, lưu các ID resource thực tế vào GitHub để các lần build tiếp theo sử dụng đúng kho.
 
-Chỉ cho nhánh production triển khai production. Tắt automatic deploy nhánh thử nghiệm, hoặc dùng Worker/D1/R2/KV riêng cho staging; không chạy migration production từ preview PR.
+Chỉ cho nhánh production triển khai production. Tắt automatic deploy nhánh thử nghiệm, hoặc dùng Worker/D1/KV riêng cho staging; không chạy migration production từ preview PR.
 
 ## 3. Thiết lập đăng nhập GitHub
 
@@ -94,7 +109,7 @@ AI không tự chạy khi đóng ChatGPT. Cloudflare chỉ lưu, giao việc và
 
 Dữ liệu Sites/R2 cũ không tự chuyển sang Cloudflare của bạn. Không sao chép DB hoặc upload giữa tài khoản khi chưa xác nhận. JSON backup không chứa file nhị phân; namespace owner mới là github:<numeric-id>, khác ID Sites, nên không nhập nguyên metadata file cũ như thể file đã có. Cần tải lại file và gắn lại các liên kết hoặc thực hiện migration dữ liệu riêng.
 
-Upload giao diện: 30 MB/tệp. MCP đọc file: 5 MB/lượt. MCP nộp artifact: 1 MB/tệp. Video lớn hơn lưu URL nguồn và ảnh từng shot. Metadata dự án vẫn lưu dạng JSON trong D1; bản tổ chức triển khai này chưa chuyển thư viện sang tìm kiếm FTS/phân trang riêng.
+Upload giao diện Cloudflare KV: 20 MiB/tệp. MCP đọc file: 5 MB/lượt. MCP nộp artifact: 1 MB/tệp. Video lớn hơn lưu URL nguồn và ảnh từng shot. Metadata dự án vẫn lưu dạng JSON trong D1; bản tổ chức triển khai này chưa chuyển thư viện sang tìm kiếm FTS/phân trang riêng.
 
 ## 7. Chạy và kiểm tra cục bộ
 
@@ -117,3 +132,8 @@ https://github.com/cloudflare/workers-oauth-provider
 https://developers.cloudflare.com/workers/ci-cd/builds/git-integration/github-integration/
 https://developers.cloudflare.com/workers/platform/deploy-buttons/
 https://developers.openai.com/plugins/build/auth
+
+
+Nguồn hạn mức KV Free: https://developers.cloudflare.com/kv/platform/pricing/
+Nguồn giới hạn value/metadata: https://developers.cloudflare.com/kv/platform/limits/
+Nguồn độ trễ nhất quán: https://developers.cloudflare.com/kv/concepts/how-kv-works/
