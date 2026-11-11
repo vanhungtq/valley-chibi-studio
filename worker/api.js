@@ -40,10 +40,27 @@ function validState(v,owner){
  }
  if(v.episodes.length&&!ids.has(v.activeEpisode))throw fail(400,'Tập hiện tại không tồn tại.');
  for(const a of v.assets){
-  if(!isObj(a)||typeof a.id!=='string'||!/^[a-f0-9-]{36}$/.test(a.id)||a.key!=='users/'+encodeURIComponent(owner)+'/'+a.id||a.url!=='/api/files/'+a.id||typeof a.name!=='string'||typeof a.mime!=='string'||!mimeTypes.has(a.mime)||!Number.isFinite(a.size)||a.size<1||a.size>MAX_FILE||!['context','character','prop','knowledge','reference'].includes(a.category)||typeof a.description!=='string'||typeof a.tags!=='string'||(a.episodeId&&!ids.has(a.episodeId)))throw fail(400,'Tài nguyên không hợp lệ hoặc thuộc tài khoản khác.');
+  if(!isObj(a)||typeof a.id!=='string'||!/^[a-f0-9-]{36}$/.test(a.id)||a.key!=='users/'+encodeURIComponent(owner)+'/'+a.id||a.url!=='/api/files/'+a.id||typeof a.name!=='string'||typeof a.mime!=='string'||!mimeTypes.has(a.mime)||!Number.isFinite(a.size)||a.size<1||a.size>MAX_FILE||!['context','character','prop','knowledge','reference','storyboard'].includes(a.category)||typeof a.description!=='string'||typeof a.tags!=='string'||(a.episodeId&&!ids.has(a.episodeId)))throw fail(400,'Tài nguyên không hợp lệ hoặc thuộc tài khoản khác.');
  }
+ const assetsById=new Map(v.assets.map(a=>[a.id,a]));
+ if(assetsById.size!==v.assets.length)throw fail(400,'ID tài nguyên bị trùng.');
+ const linked=(id,type,episodeId)=>{const a=assetsById.get(id);return a&&a.mime.startsWith(type+'/')&&(!a.episodeId||a.episodeId===episodeId);};
  for(const r of v.references){
-  if(!isObj(r)||typeof r.id!=='string'||typeof r.title!=='string'||!r.title.trim()||typeof r.note!=='string'||!r.note.trim()||typeof r.tags!=='string'||typeof r.url!=='string'||(r.url&&!/^https?:\/\//i.test(r.url))||!['technique','reference','production'].includes(r.kind)||(r.episodeId&&!ids.has(r.episodeId)))throw fail(400,'Kiến thức tham khảo không hợp lệ.');
+  if(!isObj(r)||typeof r.id!=='string'||typeof r.title!=='string'||!r.title.trim()||typeof r.note!=='string'||typeof r.tags!=='string'||typeof r.url!=='string'||(r.url&&!/^https?:\/\//i.test(r.url))||!['technique','reference','production'].includes(r.kind)||(r.episodeId&&!ids.has(r.episodeId)))throw fail(400,'Kiến thức tham khảo không hợp lệ.');
+  if(r.imageIds!==undefined&&(!Array.isArray(r.imageIds)||r.imageIds.length>60||r.imageIds.some(id=>!linked(id,'image',r.episodeId))))throw fail(400,'Ảnh kiến thức không tồn tại hoặc sai phạm vi.');
+  if(r.videoId&&!linked(r.videoId,'video',r.episodeId))throw fail(400,'Video mẫu không tồn tại hoặc sai phạm vi.');
+  if(r.shots!==undefined){
+   if(!Array.isArray(r.shots)||r.shots.length>200)throw fail(400,'Mỗi video mẫu tối đa 200 shot phân tích.');
+   const shotIds=new Set();for(const s of r.shots){
+    if(!isObj(s)||typeof s.id!=='string'||! /^[a-zA-Z0-9_-]{1,80}$/.test(s.id)||shotIds.has(s.id)||['title','timecode','size','lens','move','note','imageId'].some(k=>typeof s[k]!=='string'||s[k].length>4000)||(s.imageId&&!linked(s.imageId,'image',r.episodeId)))throw fail(400,'Shot reference hoặc ảnh góc quay không hợp lệ.');
+    shotIds.add(s.id);
+   }
+  }
+ }
+ for(const e of v.episodes)if(e.storyboards!==undefined){
+  if(!isObj(e.storyboards))throw fail(400,'Storyboard không hợp lệ.');
+  const shotIds=new Set(e.scenes.flatMap(s=>s.shots.map(sh=>sh.id)));
+  for(const [id,b] of Object.entries(e.storyboards))if(!shotIds.has(id)||!isObj(b)||!linked(b.assetId,'image',e.id)||!(b.panel===null||Number.isInteger(b.panel)&&b.panel>=0&&b.panel<4)||typeof b.generated!=='boolean')throw fail(400,'Ảnh storyboard phải liên kết đúng shot và tài nguyên.');
  }
 }
 export function validateScenes(scenes){
@@ -67,7 +84,11 @@ function fingerprint(state,e){return JSON.stringify({brief:e.brief,stage:e.stage
 export function chooseResources(state,e){
  const words=new Set((e.brief+' '+e.title).toLowerCase().split(/\s+/).filter(x=>x.length>2));
  const score=x=>Array.from(words).filter(w=>JSON.stringify(x).toLowerCase().includes(w)).length;
- return {assets:state.assets.filter(a=>!a.episodeId||a.episodeId===e.id).sort((a,b)=>score(b)-score(a)).slice(0,16),references:state.references.filter(a=>!a.episodeId||a.episodeId===e.id).sort((a,b)=>score(b)-score(a)).slice(0,10)};
+ const references=state.references.filter(a=>!a.episodeId||a.episodeId===e.id).sort((a,b)=>score(b)-score(a)).slice(0,10);
+ const eligible=state.assets.filter(a=>!a.episodeId||a.episodeId===e.id).sort((a,b)=>score(b)-score(a));
+ const explicit=new Set([...references.flatMap(r=>[...(r.imageIds||[]),r.videoId,...(r.shots||[]).map(s=>s.imageId)]),...e.scenes.flatMap(s=>s.shots.flatMap(sh=>sh.assetIds||[])),...Object.values(e.storyboards||{}).map(b=>b.assetId)].filter(Boolean));
+ const assets=eligible.filter(a=>explicit.has(a.id)||eligible.indexOf(a)<16);
+ return {assets,references,selection:{availableAssets:eligible.length,includedAssets:assets.length,availableReferences:state.references.filter(r=>!r.episodeId||r.episodeId===e.id).length,includedReferences:references.length,note:'Gói gồm tư liệu liên quan, toàn bộ ảnh/video gắn với reference được chọn và ảnh gắn shot. Đọc tệp thật qua studio_read_resource; ghi chú và URL không chứng minh đã xem video. Có thể đọc studio_get_project để kiểm tra nguồn còn thiếu.'}};
 }
 const STR={type:'string'};
 const shotSchema={type:'object',properties:{id:STR,size:STR,lens:STR,move:STR,action:STR,seconds:{type:'integer'},sound:STR,light:STR,assetIds:{type:'array',items:STR},note:STR},required:['id','size','lens','move','action','seconds','sound','light','assetIds','note'],additionalProperties:false};
@@ -104,11 +125,15 @@ export async function handleApi(request,env){
   const key='users/'+encodeURIComponent(owner)+'/'+id;
   if(request.method==='DELETE'){await env.BUCKET.delete(key);return json({ok:true});}
   if(request.method==='GET'){
-   const object=await env.BUCKET.get(key);if(!object)throw fail(404,'Không tìm thấy tệp.');
+   const object=await env.BUCKET.get(key,request.headers.has('range')?{range:request.headers}:undefined);if(!object)throw fail(404,'Không tìm thấy tệp.');
    const headers=new Headers({'content-type':object.httpMetadata?.contentType||'application/octet-stream','cache-control':'private, max-age=60','x-content-type-options':'nosniff'});
+   headers.set('accept-ranges','bytes');
+   const partial=request.headers.has('range')&&object.range&&Number.isFinite(object.range.offset)&&Number.isFinite(object.range.length)&&Number.isFinite(object.size);
+   if(partial){headers.set('content-range',`bytes ${object.range.offset}-${object.range.offset+object.range.length-1}/${object.size}`);headers.set('content-length',String(object.range.length));}
+   else if(Number.isFinite(object.size))headers.set('content-length',String(object.size));
    headers.set('content-disposition',(object.httpMetadata?.contentType==='text/html'?'attachment':'inline')+'; filename*=UTF-8\'\''+encodeURIComponent(object.customMetadata?.name||'resource'));
    if(object.httpMetadata?.contentType==='text/html')headers.set('content-security-policy',"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:");
-   return new Response(object.body,{headers});
+   return new Response(object.body,{headers,status:partial?206:200});
   }
  }
  if(path==='/api/run'&&request.method==='POST'){

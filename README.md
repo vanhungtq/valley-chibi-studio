@@ -42,6 +42,16 @@ Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → 
 - Tập mẫu có 6 cảnh, 24 shot, 480 giây mục tiêu dựng. Nội dung mẫu được gắn nhãn riêng.
 - Đăng nhập Sites, D1 cho bản ghi, R2 theo tài khoản; JSON sao lưu không chứa file nhị phân.
 
+## Storyboard ChatGPT & thư viện tri thức có hình
+
+- Storyboard → **Tạo ảnh bằng ChatGPT**: chia shot list thành nhóm 4, sao chép prompt cho một ảnh 2×2 không viền. Designer nhận cùng hướng dẫn qua MCP. Không gọi API mô hình bên ngoài.
+- **Nhập ảnh 4 shot**: chọn nhóm hoặc gán riêng từng ô, tải ảnh lên, cắt bằng Canvas của trình duyệt và lưu từng JPEG vào R2. Ảnh AI có nhãn riêng, được đưa vào production book và tải theo từng shot.
+- Designer có thể dùng `studio_save_artifact` với trường tùy chọn `storyboard_shot_ids` (1–4 ID theo thứ tự trên trái, trên phải, dưới trái, dưới phải). Tối đa 1 MB/ảnh. Sau `studio_submit_result`, Xưởng liên kết các ô vào shot và dừng chờ duyệt. Bản gốc được lưu một lần; giao diện/HTML cắt theo ô, tải từng ảnh sẽ cắt JPEG thực tế.
+- Tri thức → **Thêm kiến thức**: ảnh minh họa kỹ thuật có thể tải trực tiếp, không cần URL. Video mẫu có file MP4/MOV hoặc URL nguồn, kênh/tác giả, ảnh minh họa và tối đa 200 shot theo thứ tự.
+- Mỗi shot reference có timecode, ảnh góc quay, cỡ cảnh, tiêu cự nếu biết, chuyển động và chú thích. Có thể lấy khung hình từ video đã lưu tại vị trí đang dừng, thêm/xóa/đổi thứ tự shot và tìm theo nội dung phân tích.
+- Gói Codex giữ toàn bộ ảnh/video liên kết với reference được chọn, kể cả ngoài 16 tài nguyên gợi ý ban đầu. Ghi rõ số nguồn đã chọn. Agent đọc ảnh thật và dẫn nguồn, học nguyên tắc để vận dụng vào câu chuyện riêng.
+- Giới hạn hiện tại: 30 MB/tệp tải từ giao diện, 5 MB/lượt đọc MCP, 1 MB/file Codex nộp. Video lớn hơn dùng URL và ảnh shot; URL chưa được tự động tải, xem hoặc chép lời. Ghép 4 shot giảm số lần tạo ảnh nhưng không bảo đảm tỷ lệ tiết kiệm token.
+
 ## Công cụ MCP
 
 | Công cụ | Mục đích |
