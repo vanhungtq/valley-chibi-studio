@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node scripts/build-cloudflare.mjs",
     "test": "npm run test:unit && npm run test:cloudflare",
-    "check": "node --check worker/api.js && node --check worker/bridge.js && node --check worker/mcp.js && node --check public/app.js && node --check public/scene.js && node --check public/exports.js && node --check public/storyboard.js && node --check public/references.js && node --check public/theme-init.js && node --check public/theme.js && node --check public/motion.js && node --check public/scene-controls.js && node --check worker/cloudflare.js && node --check worker/cloudflare/security.js && node --check worker/cloudflare/github.js && node --check worker/cloudflare/auth.js && node --check worker/cloudflare/file-storage.js",
+    "check": "node --check worker/api.js && node --check worker/bridge.js && node --check worker/mcp.js && node --check public/app.js && node --check public/codex-connect.js && node --check public/scene.js && node --check public/exports.js && node --check public/storyboard.js && node --check public/references.js && node --check public/theme-init.js && node --check public/theme.js && node --check public/motion.js && node --check public/scene-controls.js && node --check worker/cloudflare.js && node --check worker/cloudflare/security.js && node --check worker/cloudflare/github.js && node --check worker/cloudflare/auth.js && node --check worker/cloudflare/file-storage.js",
     "build:cloudflare": "node scripts/build-cloudflare.mjs",
     "build:sites": "node scripts/build.mjs",
     "dev": "wrangler dev --local-protocol https",

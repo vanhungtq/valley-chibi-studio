@@ -1,4 +1,4 @@
-<!doctype html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cài Cloudflare · Valley Studio</title><link rel="stylesheet" href="/assets/fonts.css"><style>body{margin:0;background:#f7f8f4;color:#263a31;font:14px/1.8 'Studio Sans',Arial}main{max-width:960px;margin:auto;padding:40px 24px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}a{color:#294b3e}</style></head><body><main><p><a href="/">← Về Xưởng</a> · <a href="https://github.com/vanhungtq/valley-chibi-studio">GitHub</a></p><pre># Cài Valley Chibi Studio trên Cloudflare từ GitHub
+<!doctype html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cài Cloudflare · Valley Studio</title><link rel="stylesheet" href="/assets/fonts.css"><style>body{margin:0;background:#f7f8f4;color:#263a31;font:14px/1.8 'Studio Sans',Arial}main{max-width:960px;margin:auto;padding:40px 24px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}a{color:#294b3e}</style></head><body><main><p><a href="/">← Về Xưởng</a> · <a href="/resume.html">Đổi Codex</a> · <a href="/codex-resume-prompt.txt" download>Prompt tiếp tục</a> · <a href="https://github.com/vanhungtq/valley-chibi-studio">GitHub</a></p><pre># Cài Valley Chibi Studio trên Cloudflare từ GitHub
 
 Đây là bản Workers độc lập: giao diện + API + Remote MCP cùng một Worker, D1 lưu dự án/đầu việc, Workers KV `FILES_KV` lưu file, KV `OAUTH_KV` lưu phiên đăng nhập và OAuth. Bản mặc định dùng được với Workers Free trong hạn mức, không cần R2. Giữ đầy đủ storyboard ảnh ChatGPT, thư viện Reference, Dark Mode và chibi 3D.
 
@@ -100,6 +100,12 @@ Trong ảnh Zero Trust → Access controls → MCP Portals:
 - Một Xưởng riêng có thể kết nối thẳng URL /mcp vào ChatGPT/Codex, chưa cần tạo Portal. Portal là lớp bổ sung tùy chọn, cần kiểm tra luồng OAuth riêng nếu sử dụng.
 
 Plugin Sites đã cài vẫn trỏ về Site cũ. Bản Cloudflare cần kết nối MCP riêng; không tự thay đổi endpoint của plugin Sites.
+
+### Dùng nhiều tài khoản Codex với cùng Xưởng
+
+Đổi tài khoản Codex chỉ cần kết nối lại cùng URL MCP và cấp quyền bằng cùng GitHub chủ Xưởng. Dữ liệu giữ ở Cloudflare; không cần tạo Worker/D1/KV hoặc GitHub OAuth App khác. Chọn **Kết nối Codex** để sao chép URL và yêu cầu tiếp tục có ID đầu việc. Với việc đang chạy, chủ dự án có thể bấm **Bàn giao sang Codex khác**: phiên cũ mất claim, tiến độ/file giữ lại, phiên mới nhận token mới ngay. Kết quả vẫn chờ bạn duyệt.
+
+[Hướng dẫn chuyển tài khoản](RESUME_CODEX.vi.md) và [prompt tiếp tục](CODEX_RESUME_PROMPT.vi.md) phân biệt kết nối lại, sửa mã GitHub và tạo Xưởng mới. Chat/file chưa đồng bộ không tự chuyển tài khoản. Mỗi tài khoản/workspace cần hỗ trợ custom MCP; không sao chép thông tin đăng nhập giữa các tài khoản.
 
 ## 5. Kiểm tra sau cài
 

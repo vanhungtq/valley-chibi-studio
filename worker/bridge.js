@@ -1,5 +1,5 @@
 import {AGENTS,STAGES} from '../public/data.js';
-import {readState,saveState,validateScenes,chooseResources,outputSchema,body,fail,json} from './api.js';
+import {readState,validateScenes,chooseResources,outputSchema,body,fail,json} from './api.js';
 
 const LEASE_MS=15*60*1000;
 const MAX_ARTIFACT=1024*1024;
@@ -30,12 +30,12 @@ export async function queueTask(env,owner,episodeId){
  const row=await env.DB.prepare("SELECT * FROM codex_tasks WHERE owner = ? AND episode_id = ? AND stage = ? AND status IN ('queued','running')").bind(owner,e.id,e.stage).first();
  return publicTask(row);
 }
-export async function getTask(env,owner,id){const row=await taskRow(env,owner,id);return {task:publicTask(row),instructions:TASK_RULES+'\n\n'+AGENTS[row.stage].instruction+'\n\n'+KNOWLEDGE_RULES+(row.stage===4?'\n\n'+STORYBOARD_RULES:'')+'\n\nTrước khi làm: studio_claim_task. Trong khi làm: studio_report_progress ít nhất mỗi 10 phút. Đọc tư liệu bằng studio_read_resource. Tạo file bằng công cụ Codex rồi dùng studio_save_artifact nếu dưới 1 MB. Nộp qua studio_submit_result. Bước biên kịch/quay phim cần toàn bộ scenes và shots; các bước khác scenes=[]. Giữ ID ổn định. sources và assetIds chỉ dùng ID trong gói đầu việc. Chỉ báo đã tạo file khi studio_save_artifact trả về thành công.',context:JSON.parse(row.input_snapshot),outputSchema};}
+export async function getTask(env,owner,id){const row=await taskRow(env,owner,id);return {task:publicTask(row),instructions:TASK_RULES+'\n\n'+AGENTS[row.stage].instruction+'\n\n'+KNOWLEDGE_RULES+(row.stage===4?'\n\n'+STORYBOARD_RULES:'')+'\n\nTrước khi làm: đọc task.progress và task.artifacts để tiếp tục phần đã lưu từ phiên Codex khác; đọc file liên quan bằng studio_read_resource. Không giả định có lịch sử chat hoặc file chưa đồng bộ của phiên cũ. Nhận bằng studio_claim_task và dùng claimToken mới của phiên này; nếu lease cũ còn hiệu lực, chờ hết hạn hoặc chủ dự án bấm Bàn giao sang Codex khác trong Xưởng. Trong khi làm: studio_report_progress ít nhất mỗi 10 phút. Đọc tư liệu bằng studio_read_resource. Tạo file bằng công cụ Codex rồi dùng studio_save_artifact nếu dưới 1 MB. Nộp qua studio_submit_result. Bước biên kịch/quay phim cần toàn bộ scenes và shots; các bước khác scenes=[]. Giữ ID ổn định. sources và assetIds chỉ dùng ID trong gói đầu việc. Chỉ báo đã tạo file khi studio_save_artifact trả về thành công.',context:JSON.parse(row.input_snapshot),outputSchema};}
 export async function claimTask(env,owner,id){
  const row=await taskRow(env,owner,id),check=await sourceIsCurrent(env,owner,row);
  if(!check.current){await markStale(env,owner,id);throw fail(409,'Brief hoặc tư liệu đã đổi. Chủ dự án cần giao đầu việc mới.');}
  const now=Date.now(),token=crypto.randomUUID();
- const updated=await env.DB.prepare("UPDATE codex_tasks SET status = 'running', claim_token = ?, lease_until = ?, progress = ?, updated_at = ? WHERE owner = ? AND id = ? AND (status = 'queued' OR (status = 'running' AND lease_until < ?))").bind(token,now+LEASE_MS,'Codex đã nhận việc.',new Date().toISOString(),owner,id,now).run();
+ const updated=await env.DB.prepare("UPDATE codex_tasks SET status = 'running', claim_token = ?, lease_until = ?, progress = CASE WHEN progress = '' THEN ? ELSE progress END, updated_at = ? WHERE owner = ? AND id = ? AND (status = 'queued' OR (status = 'running' AND lease_until < ?))").bind(token,now+LEASE_MS,'Codex đã nhận việc.',new Date().toISOString(),owner,id,now).run();
  if(!updated.meta.changes)throw fail(409,'Đầu việc đang thuộc một phiên Codex còn hiệu lực.');
  return {task:publicTask(await taskRow(env,owner,id)),claimToken:token,instructions:'Giữ claimToken trong phiên công việc, dùng khi báo tiến độ và nộp kết quả. Không đưa token vào file xuất hoặc ghi chú công khai.'};
 }
@@ -43,7 +43,8 @@ export async function reportProgress(env,owner,id,token,message){
  const row=await assertClaim(env,owner,id,token),check=await sourceIsCurrent(env,owner,row);
  if(!check.current){await markStale(env,owner,id);throw fail(409,'Dữ liệu đầu vào đã đổi. Dừng tác vụ và nhận gói mới.');}
  const text=String(message||'').trim();if(!text||text.length>1200)throw fail(400,'Tiến độ cần là ghi chú ngắn 1–1200 ký tự.');
- await env.DB.prepare('UPDATE codex_tasks SET progress = ?, lease_until = ?, updated_at = ? WHERE owner = ? AND id = ? AND claim_token = ?').bind(text,Date.now()+LEASE_MS,new Date().toISOString(),owner,id,token).run();
+ const updated=await env.DB.prepare("UPDATE codex_tasks SET progress = ?, lease_until = ?, updated_at = ? WHERE owner = ? AND id = ? AND claim_token = ? AND status = 'running' AND lease_until >= ?").bind(text,Date.now()+LEASE_MS,new Date().toISOString(),owner,id,token,Date.now()).run();
+ if(!updated.meta.changes)throw fail(409,'Phiên đã được bàn giao hoặc hết hạn. Đọc lại đầu việc trước khi tiếp tục.');
  return publicTask(await taskRow(env,owner,id));
 }
 export async function submitResult(env,owner,id,token,output){
@@ -70,8 +71,19 @@ export async function submitResult(env,owner,id,token,output){
  e.outputs[row.stage]={...accepted,taskId:id,agent:row.agent,at,mode:'codex',version:e.versions.length+1,artifacts:JSON.parse(row.artifacts||'[]')};
  if([2,3].includes(row.stage)){e.scenes=structuredClone(output.scenes);const ids=new Set(e.scenes.flatMap(s=>s.shots.map(sh=>sh.id)));if(e.storyboards)e.storyboards=Object.fromEntries(Object.entries(e.storyboards).filter(([id])=>ids.has(id)));e.stale=false;}
  e.activity.push({id:crypto.randomUUID(),agent:row.agent,text:output.summary,at,kind:'codex'});
- const revision=await saveState(env,owner,check.loaded.state,check.loaded.revision);
- await env.DB.prepare("UPDATE codex_tasks SET status = 'awaiting_review', result_digest = ?, progress = ?, lease_until = NULL, updated_at = ? WHERE owner = ? AND id = ?").bind(hash,'Codex đã nộp kết quả. Chờ chủ dự án duyệt.',at,owner,id).run();
+ // Commit the task and project in one D1 transaction. A handoff/cancellation,
+ // new artifact, expired lease or competing state write must prevent BOTH writes.
+ const priorRevision=check.loaded.revision,state=check.loaded.state;
+ state.updatedAt=at;
+ const stateGuard=priorRevision===0?'NOT EXISTS (SELECT 1 FROM studio_state WHERE owner = ?)':'EXISTS (SELECT 1 FROM studio_state WHERE owner = ? AND revision = ?)';
+ const taskUpdate=env.DB.prepare(`UPDATE codex_tasks SET status = 'awaiting_review', result_digest = ?, progress = ?, lease_until = NULL, updated_at = ? WHERE owner = ? AND id = ? AND status = 'running' AND claim_token = ? AND lease_until >= ? AND artifacts = ? AND ${stateGuard}`).bind(hash,'Codex đã nộp kết quả. Chờ chủ dự án duyệt.',at,owner,id,token,Date.now(),row.artifacts,...(priorRevision===0?[owner]:[owner,priorRevision]));
+ const acceptedTask="EXISTS (SELECT 1 FROM codex_tasks WHERE owner = ? AND id = ? AND status = 'awaiting_review' AND claim_token = ? AND result_digest = ? AND updated_at = ?)";
+ const stateUpdate=priorRevision===0
+  ?env.DB.prepare(`INSERT OR IGNORE INTO studio_state (owner,state,revision,updated_at) SELECT ?,?,1,? WHERE ${acceptedTask}`).bind(owner,JSON.stringify(state),at,owner,id,token,hash,at)
+  :env.DB.prepare(`UPDATE studio_state SET state = ?, revision = revision + 1, updated_at = ? WHERE owner = ? AND revision = ? AND ${acceptedTask}`).bind(JSON.stringify(state),at,owner,priorRevision,owner,id,token,hash,at);
+ const committed=await env.DB.batch([taskUpdate,stateUpdate]);
+ if(!committed[0].meta.changes){const latest=await taskRow(env,owner,id);if(latest.result_digest===hash)return {task:publicTask(latest),alreadySubmitted:true};throw fail(409,'Phiên công việc hoặc dữ liệu đã thay đổi. Đọc lại gói đầu việc; kết quả này chưa được áp dụng.');}
+ const revision=priorRevision+1;
  return {task:publicTask(await taskRow(env,owner,id)),revision,awaitingHumanReview:true};
 }
 export async function saveArtifact(env,owner,id,token,args){
@@ -110,7 +122,18 @@ export async function readResource(env,owner,id){
 export async function closeTask(env,owner,id,token,status,message){
  if(!['error','cancelled'].includes(status))throw fail(400,'Trạng thái không hợp lệ.');
  if(status==='error')await assertClaim(env,owner,id,token);else await taskRow(env,owner,id);
- await env.DB.prepare("UPDATE codex_tasks SET status = ?, progress = ?, claim_token = NULL, lease_until = NULL, updated_at = ? WHERE owner = ? AND id = ? AND status IN ('queued','running')").bind(status,String(message||'Đã dừng công việc.').slice(0,1200),new Date().toISOString(),owner,id).run();return publicTask(await taskRow(env,owner,id));
+ const updated=await env.DB.prepare("UPDATE codex_tasks SET status = ?, progress = ?, claim_token = NULL, lease_until = NULL, updated_at = ? WHERE owner = ? AND id = ? AND status IN ('queued','running') AND (? = 'cancelled' OR (claim_token = ? AND lease_until >= ?))").bind(status,String(message||'Đã dừng công việc.').slice(0,1200),new Date().toISOString(),owner,id,status,token,Date.now()).run();
+ if(status==='error'&&!updated.meta.changes)throw fail(409,'Phiên đã được bàn giao hoặc hết hạn.');
+ return publicTask(await taskRow(env,owner,id));
+}
+export async function handoffTask(env,owner,id){
+ const row=await taskRow(env,owner,id);
+ if(row.status==='queued')return publicTask(row);
+ if(row.status!=='running')throw fail(409,'Chỉ bàn giao đầu việc đang chạy. Kết quả đã nộp vẫn chờ bạn duyệt.');
+ const check=await sourceIsCurrent(env,owner,row);if(!check.current){await markStale(env,owner,id);throw fail(409,'Đầu vào đã đổi. Hãy giao đầu việc mới.');}
+ const updated=await env.DB.prepare("UPDATE codex_tasks SET status = 'queued', claim_token = NULL, lease_until = NULL, progress = ? || substr(progress,1,1000), updated_at = ? WHERE owner = ? AND id = ? AND status = 'running' AND claim_token = ?").bind('Chủ dự án đã bàn giao sang phiên Codex khác. Tiến độ đã lưu: ',new Date().toISOString(),owner,id,row.claim_token).run();
+ if(!updated.meta.changes)throw fail(409,'Đầu việc vừa đổi trạng thái. Hãy tải lại trước khi bàn giao.');
+ return publicTask(await taskRow(env,owner,id));
 }
 export async function reconcileReviews(env,owner,state){
  const rows=await env.DB.prepare("SELECT * FROM codex_tasks WHERE owner = ? AND status IN ('awaiting_review','approved')").bind(owner).all();
@@ -121,5 +144,6 @@ export async function handleTasks(request,env,owner){
  if(parts.length===2){if(request.method==='GET')return json({tasks:await listTasks(env,owner,u.searchParams.get('episodeId'))});if(request.method==='POST'){const b=await body(request);return json({task:await queueTask(env,owner,b.episodeId)},201);}}
  const id=parts[2];if(parts.length===3&&request.method==='GET')return json(await getTask(env,owner,id));
  if(parts[3]==='cancel'&&request.method==='POST')return json({task:await closeTask(env,owner,id,null,'cancelled','Chủ dự án đã hủy đầu việc.')});
+ if(parts.length===4&&parts[3]==='handoff'&&request.method==='POST')return json({task:await handoffTask(env,owner,id)});
  throw fail(404,'Không tìm thấy thao tác đầu việc.');
 }

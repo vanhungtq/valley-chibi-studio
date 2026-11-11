@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import mfPackage from 'miniflare';
 import {s256} from '../worker/cloudflare/github.js';
 import {sampleOutput} from '../worker/api.js';
+import {seedEpisode} from '../public/data.js';
 const {Miniflare,convertV4MiniflareOptions}=mfPackage;
 const ORIGIN='https://studio.test';let mf;
 class CookieJar{values=new Map();take(response){const list=response.headers.getSetCookie?.()||[response.headers.get('set-cookie')].filter(Boolean);for(const value of list){const pair=value.split(';')[0],i=pair.indexOf('=');if(/Max-Age=0(?:;|$)/i.test(value))this.values.delete(pair.slice(0,i));else this.values.set(pair.slice(0,i),pair.slice(i+1));}}header(){return [...this.values].map(([k,v])=>k+'='+v).join('; ');}}
@@ -38,3 +39,48 @@ test('OAuth consent, GitHub login, PKCE token, refresh token and MCP tools share
 });
 
 test('Cloudflare Free uploads and serves private files using KV with range support and no R2 binding',async()=>{const jar=new CookieJar();await githubLogin(jar);const config=await(await request('/api/config',{},jar)).json();assert.equal(config.storageProvider,'kv');assert.equal(config.maxUploadBytes,20*1024*1024);const health=await(await request('/healthz')).json();assert.equal(health.filesReady,true);assert.equal(health.storageProvider,'kv');const form=new FormData();form.set('file',new File(['0123456789'],'notes.txt',{type:'text/plain'}));const uploaded=await request('/api/files',{method:'POST',headers:{Origin:ORIGIN},body:form},jar);assert.equal(uploaded.status,201,await uploaded.clone().text());const file=await uploaded.json();const partial=await request(file.url,{headers:{Range:'bytes=2-5'}},jar);assert.equal(partial.status,206);assert.equal(await partial.text(),'2345');assert.equal(partial.headers.get('content-range'),'bytes 2-5/10');assert.equal((await request(file.url)).status,401);const invalid=await request(file.url,{headers:{Range:'bytes=99-'}},jar);assert.equal(invalid.status,416);assert.equal(invalid.headers.get('content-range'),'bytes */10');const kv=await mf.getKVNamespace('FILES_KV','studio');assert.equal(await kv.get(file.key),'0123456789');});
+
+async function codexClient(name){
+ const jar=new CookieJar();assert.equal((await githubLogin(jar)).status,302);
+ const redirect='https://'+name+'.test/callback';
+ const registered=await request('/oauth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({client_name:name,redirect_uris:[redirect],grant_types:['authorization_code','refresh_token'],response_types:['code'],token_endpoint_auth_method:'none'})});
+ assert.equal(registered.status,201);const client=await registered.json(),verifier=name.padEnd(64,'x');
+ const authorize='/authorize?'+new URLSearchParams({response_type:'code',client_id:client.client_id,redirect_uri:redirect,scope:'studio:access offline_access',state:name,code_challenge:await s256(verifier),code_challenge_method:'S256',resource:ORIGIN+'/mcp'});
+ const consent=await request(authorize,{},jar);assert.equal(consent.status,200);
+ const handle=(await consent.text()).match(/name="handle" value="([^"]+)"/)[1];
+ const approval=await request('/authorize',{method:'POST',headers:{Origin:ORIGIN,'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({handle,decision:'approve'}).toString()},jar);
+ assert.equal(approval.status,302);const callback=new URL(approval.headers.get('location'));assert.equal(callback.origin,new URL(redirect).origin);
+ const exchanged=await request('/oauth/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code:callback.searchParams.get('code'),client_id:client.client_id,redirect_uri:redirect,code_verifier:verifier,resource:ORIGIN+'/mcp'}).toString()});
+ assert.equal(exchanged.status,200);const token=await exchanged.json();
+ const tool=async(name,args={})=>{const response=await request('/mcp',{method:'POST',headers:{authorization:'Bearer '+token.access_token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})});assert.equal(response.status,200);return (await response.json()).result;};
+ return {jar,client,token,tool};
+}
+
+test('two independently authorized Codex clients continue the same Cloudflare project and task',async()=>{
+ const first=await codexClient('codex-first'),second=await codexClient('codex-second');
+ assert.notEqual(first.client.client_id,second.client.client_id);assert.notEqual(first.token.access_token,second.token.access_token);
+ assert.equal((await(await request('/api/config',{},second.jar)).json()).mcpUrl,ORIGIN+'/mcp');
+ const current=await(await request('/api/state',{},first.jar)).json(),episode={...seedEpisode(),id:crypto.randomUUID(),title:'Chuyển tài khoản Codex',sample:false};
+ current.state.episodes.push(episode);current.state.activeEpisode=episode.id;
+ assert.equal((await request('/api/state',{method:'PUT',headers:{Origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify(current)},first.jar)).status,200);
+ const project=JSON.parse((await second.tool('studio_get_project')).content[0].text);
+ assert.equal(project.state.activeEpisode,episode.id);assert.equal(project.state.project.name,current.state.project.name);
+ const queued=await request('/api/tasks',{method:'POST',headers:{Origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({episodeId:episode.id})},first.jar);
+ assert.equal(queued.status,201);const task=(await queued.json()).task;
+ const oldClaim=JSON.parse((await first.tool('studio_claim_task',{task_id:task.id})).content[0].text).claimToken;
+ await first.tool('studio_report_progress',{task_id:task.id,claim_token:oldClaim,message:'Đã lập dàn ý, cần bổ sung lịch quay.'});
+ const artifact=JSON.parse((await first.tool('studio_save_artifact',{task_id:task.id,claim_token:oldClaim,filename:'resume.md',mime:'text/markdown',encoding:'utf8',content:'Dàn ý đã lưu từ Codex thứ nhất.'})).content[0].text);
+ assert.equal((await request('/api/tasks/'+task.id+'/handoff',{method:'POST',headers:{Origin:'https://wrong.test'}},first.jar)).status,403);
+ assert.equal((await request('/api/tasks/'+task.id+'/handoff',{method:'POST',headers:{Origin:ORIGIN}},first.jar)).status,200);
+ assert.equal((await first.tool('studio_submit_result',{task_id:task.id,claim_token:oldClaim,output:sampleOutput(0)})).isError,true);
+ const packet=JSON.parse((await second.tool('studio_get_task',{task_id:task.id})).content[0].text);
+ assert.match(packet.task.progress,/cần bổ sung lịch quay/);assert.equal(packet.task.artifacts[0].id,artifact.id);
+ assert.match((await second.tool('studio_read_resource',{resource_id:artifact.id})).content[0].text,/Codex thứ nhất/);
+ const claim=JSON.parse((await second.tool('studio_claim_task',{task_id:task.id})).content[0].text).claimToken;assert.notEqual(claim,oldClaim);
+ const submitted=await second.tool('studio_submit_result',{task_id:task.id,claim_token:claim,output:sampleOutput(0)});
+ assert.equal(submitted.isError,undefined);assert.equal(JSON.parse(submitted.content[0].text).awaitingHumanReview,true);
+ const result=await(await request('/api/state',{},second.jar)).json();
+ assert.equal(result.state.episodes.find(e=>e.id===episode.id).outputs[0].artifacts[0].id,artifact.id);
+ const wrongClientRefresh=await request('/oauth/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:first.token.refresh_token,client_id:second.client.client_id,resource:ORIGIN+'/mcp'}).toString()});
+ assert.notEqual(wrongClientRefresh.status,200);
+});

@@ -1,5 +1,7 @@
 # Cài Valley Chibi Studio bằng tài khoản ChatGPT khác
 
+**Nếu tiếp tục Xưởng Cloudflare hiện có khi đổi Codex, đọc [RESUME_CODEX.vi.md](RESUME_CODEX.vi.md) và dùng [prompt tiếp tục](CODEX_RESUME_PROMPT.vi.md). Chỉ kết nối lại MCP, giữ nguyên dự án và dữ liệu; không thực hiện các bước tạo Site bên dưới.** Phần còn lại dành cho một Xưởng Sites độc lập khi bạn chủ động muốn cài mới.
+
 ## 1. Mô hình vận hành
 
 **Bạn → Xưởng giao việc → Codex thực hiện → MCP đồng bộ → bạn duyệt.**

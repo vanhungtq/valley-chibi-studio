@@ -4,11 +4,17 @@ Xưởng tiền kỳ YouTube đời sống nông thôn hướng tới khán gi�
 
 **Mọi công việc sáng tạo thực hiện trong Codex.** Xưởng lưu dữ liệu, giao việc, nhận tiến độ và kết quả qua MCP. Không gọi API mô hình bên ngoài và không cần API key mô hình.
 
+## Đổi tài khoản Codex và tiếp tục cùng dự án
+
+Một Xưởng Cloudflare dùng được với nhiều tài khoản Codex/ChatGPT. Trong Xưởng chọn **Kết nối Codex**, sao chép URL/yêu cầu tiếp tục, rồi kết nối MCP và cấp quyền bằng cùng GitHub chủ Xưởng trong tài khoản mới. Với việc đang chạy, bấm **Bàn giao sang Codex khác** để phiên mới nhận ngay với token mới; tiến độ và file đã đồng bộ được giữ lại. Chat/file chưa đồng bộ không tự chuyển tài khoản.
+
+**[Hướng dẫn chuyển Codex](docs/RESUME_CODEX.vi.md)** · [Prompt tiếp tục ở tài khoản mới](docs/CODEX_RESUME_PROMPT.vi.md). Không cần tạo lại Worker, D1/KV hoặc GitHub OAuth App. Chỉ kết nối GitHub trong Codex mới khi cần đọc/sửa mã repo. Khả năng thêm MCP tùy tài khoản/workspace.
+
 ## Cài trên Cloudflare từ GitHub
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fvanhungtq%2Fvalley-chibi-studio%2Ftree%2Fmain)
 
-Chọn **Workers & Pages → Create application → Continue with GitHub**. Dùng nhánh `main` sau khi bản Workers KV Free được merge.
+Chọn **Workers & Pages → Create application → Continue with GitHub**. Dùng nhánh `main`.
 
 | Mục | Giá trị |
 |---|---|
@@ -76,7 +82,7 @@ Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → 
 ## Storyboard ChatGPT & thư viện tri thức có hình
 
 - Storyboard → **Tạo ảnh bằng ChatGPT**: chia shot list thành nhóm 4, sao chép prompt cho một ảnh 2×2 không viền. Designer nhận cùng hướng dẫn qua MCP. Không gọi API mô hình bên ngoài.
-- **Nhập ảnh 4 shot**: chọn nhóm hoặc gán riêng từng ô, tải ảnh lên, cắt bằng Canvas của trình duyệt và lưu từng JPEG vào R2. Ảnh AI có nhãn riêng, được đưa vào production book và tải theo từng shot.
+- **Nhập ảnh 4 shot**: chọn nhóm hoặc gán riêng từng ô, tải ảnh lên, cắt bằng Canvas của trình duyệt và lưu từng JPEG vào kho tệp (KV trên Cloudflare, R2 ở Sites). Ảnh AI có nhãn riêng, được đưa vào production book và tải theo từng shot.
 - Designer có thể dùng `studio_save_artifact` với trường tùy chọn `storyboard_shot_ids` (1–4 ID theo thứ tự trên trái, trên phải, dưới trái, dưới phải). Tối đa 1 MB/ảnh. Sau `studio_submit_result`, Xưởng liên kết các ô vào shot và dừng chờ duyệt. Bản gốc được lưu một lần; giao diện/HTML cắt theo ô, tải từng ảnh sẽ cắt JPEG thực tế.
 - Tri thức → **Thêm kiến thức**: ảnh minh họa kỹ thuật có thể tải trực tiếp, không cần URL. Video mẫu có file MP4/MOV hoặc URL nguồn, kênh/tác giả, ảnh minh họa và tối đa 200 shot theo thứ tự.
 - Mỗi shot reference có timecode, ảnh góc quay, cỡ cảnh, tiêu cự nếu biết, chuyển động và chú thích. Có thể lấy khung hình từ video đã lưu tại vị trí đang dừng, thêm/xóa/đổi thứ tự shot và tìm theo nội dung phân tích.
@@ -107,7 +113,7 @@ Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → 
 | `studio_submit_result` | Nộp kết quả để chủ dự án duyệt |
 | `studio_fail_task` | Báo tác vụ bị chặn |
 
-Tên công cụ trên phiên ChatGPT/Codex có thể được thêm tiền tố bởi plugin. Dùng kết nối native của Sites; không cần dựng MCP server cục bộ hay tự tạo model gateway.
+Tên công cụ trên phiên ChatGPT/Codex có thể được thêm tiền tố bởi plugin. Cloudflare dùng Remote MCP tại `/mcp`; bản Sites tùy chọn dùng plugin native của Sites. Không cần dựng model gateway.
 
 ## Mã nguồn và kiểm tra
 

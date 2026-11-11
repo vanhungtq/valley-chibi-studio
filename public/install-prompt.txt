@@ -1,5 +1,7 @@
 # Prompt cài đặt cho tài khoản ChatGPT/Codex mới
 
+Nếu muốn tiếp tục Xưởng Cloudflare hiện có, dùng [CODEX_RESUME_PROMPT.vi.md](CODEX_RESUME_PROMPT.vi.md). Prompt dưới đây chỉ dành cho việc chủ động tạo một Xưởng Sites độc lập.
+
 Sao chép toàn bộ phần bên dưới vào Codex:
 
 ```text

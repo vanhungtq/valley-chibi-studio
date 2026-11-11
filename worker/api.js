@@ -101,7 +101,7 @@ export async function handleApi(request,env){
  if(path==='/api/config'&&request.method==='GET')return json({executionMode:'codex',externalModelCalls:false,bridgeReady:!!env.DB&&!!env.BUCKET,storageReady:!!env.DB&&!!env.BUCKET,signedIn:!!owner,displayName:clean(request.headers.get('oai-authenticated-user-full-name')||request.headers.get('oai-authenticated-user-email')||'Nhà sáng tạo'),storageProvider:env.FILE_STORAGE_DRIVER||'r2',maxUploadBytes:env.FILE_MAX_BYTES||MAX_FILE});
  if(!owner)throw fail(401,'Vui lòng đăng nhập để mở dự án.');
  if(!env.DB||!env.BUCKET)throw fail(503,'Kho lưu trữ của studio chưa sẵn sàng.');
- if(path.startsWith('/api/tasks'))return handleTasks(request,env,owner);
+ if(path.startsWith('/api/tasks'))return await handleTasks(request,env,owner);
  if(path==='/api/state'){
   if(request.method==='GET')return json(await readState(env,owner));
   if(request.method==='PUT'){

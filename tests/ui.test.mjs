@@ -18,13 +18,14 @@ test('DOM integration: navigation, notes, sample review, revisions, and new epis
  Object.assign(globalThis,{window,document:window.document,location:{hash:'#library',origin:'https://studio.test'},FormData:DOMFormData,setInterval:()=>0,setTimeout:(fn,ms)=>{const timer=nativeTimeout(fn,ms);timer.unref();return timer;}});
  const displayPreferences=new Map();window.localStorage={getItem:key=>displayPreferences.get(key)||null,setItem:(key,value)=>displayPreferences.set(key,value)};
  window.scrollTo=()=>{};
- globalThis.fetch=async(path,options={})=>{const headers=new Headers(options.headers);headers.set('oai-authenticated-user-id','ui-tester');return handleApi(new Request(new URL(path,'https://studio.test'),{...options,headers}),env);};
+ globalThis.fetch=async(path,options={})=>{if(path==='/api/config')return Response.json({executionMode:'codex',externalModelCalls:false,bridgeReady:true,storageReady:true,signedIn:true,authProvider:'github',mcpUrl:'https://studio.test/mcp'});const headers=new Headers(options.headers);headers.set('oai-authenticated-user-id','ui-tester');return handleApi(new Request(new URL(path,'https://studio.test'),{...options,headers}),env);};
  const wait=()=>new Promise(resolve=>nativeTimeout(resolve,45));
  const click=async(selector)=>{const el=document.querySelector(selector);assert.ok(el,'Missing UI: '+selector);el.dispatchEvent(new window.Event('click',{bubbles:true,cancelable:true}));await wait();};
  const submit=async(selector)=>{const el=document.querySelector(selector);assert.ok(el);el.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await wait();};
  const stored=()=>JSON.parse(sqlite.prepare('SELECT state FROM studio_state WHERE owner = ?').get('ui-tester').state);
  try{
   await import('../public/app.js?dom-test');await wait();
+  await click('[data-action="connect-codex"]');assert.equal(document.querySelector('#codex-mcp-url').value,'https://studio.test/mcp');assert.match(document.querySelector('.modal').textContent,/nhiều tài khoản Codex/);assert.equal(document.querySelector('[data-action="handoff-task"]'),null);await click('[data-action="close-modal"]');
   assert.match(document.querySelector('h1').textContent,/Thư viện/);await click('[data-action="toggle-theme"]');assert.equal(document.documentElement.dataset.theme,'dark');assert.equal(displayPreferences.get('valley-theme'),'dark');
   await click('[data-page="knowledge"]');assert.equal(document.documentElement.dataset.theme,'dark');assert.equal(document.querySelector('[data-action="toggle-theme"]').getAttribute('aria-pressed'),'true');await click('[data-action="add-reference"]');
   document.querySelector('[name="title"]').value='Kỹ thuật quay từ ảnh';document.querySelector('[name="note"]').value='Học ánh sáng bên';
@@ -54,5 +55,11 @@ test('DOM integration: navigation, notes, sample review, revisions, and new epis
   await click('[data-page="episodes"]');await click('[data-action="new-episode"]');document.querySelector('#ep-title').value='Mùa mận';document.querySelector('#ep-english').value='Plum Season';document.querySelector('#ep-brief').value='Hai chị em thu hoạch mận và làm mứt.';await submit('#brief-form');
   assert.equal(stored().episodes.length,2);assert.equal(stored().episodes[1].sample,false);assert.equal(stored().episodes[1].scenes.length,0);assert.match(document.querySelector('.episode-title').textContent,/Mùa mận/);
   await click('[data-action="run-codex"]');assert.equal(sqlite.prepare('SELECT status FROM codex_tasks ORDER BY created_at DESC LIMIT 1').get().status,'queued');assert.match(document.querySelector('.codex-task-box').textContent,/chờ Codex nhận/i);assert.match(document.querySelector('.agent-state').textContent,/Chờ Codex nhận/);assert.equal(document.querySelectorAll('.agent-label.running').length,0);
+  const task=sqlite.prepare('SELECT id FROM codex_tasks ORDER BY created_at DESC LIMIT 1').get();
+  sqlite.prepare("UPDATE codex_tasks SET status = 'running', claim_token = 'old-session', lease_until = ?, progress = 'Bản nháp đã lưu' WHERE id = ?").run(Date.now()+600000,task.id);
+  await click('[data-action="close-modal"]');await click('[data-action="refresh-tasks"]');await click('[data-action="connect-codex"][data-id]');
+  assert.match(document.querySelector('.modal').textContent,/Bản nháp đã lưu/);await click('[data-action="handoff-task"]');
+  const handed=sqlite.prepare('SELECT * FROM codex_tasks WHERE id = ?').get(task.id);assert.equal(handed.status,'queued');assert.equal(handed.claim_token,null);assert.match(handed.progress,/Bản nháp đã lưu/);assert.equal(document.querySelector('[data-action="handoff-task"]'),null);
+  assert.match(document.querySelector('.output-document').textContent,new RegExp(task.id));assert.match(document.querySelector('.output-document').textContent,/studio_get_project/);
  }finally{for(const [key,value] of Object.entries(saved))globalThis[key]=value;sqlite.close();}
 });

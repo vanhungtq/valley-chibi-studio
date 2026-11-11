@@ -9,7 +9,7 @@ export async function appHandler(request,env,ctx){
  const url=new URL(request.url),path=url.pathname;
  const auth=await handleAuth(request,env);if(auth)return auth;
  if(path==='/api/config'){
-  const user=await readSession(request,env);return Response.json({executionMode:'codex',externalModelCalls:false,authProvider:'github',loginUrl:'/auth/login',logoutUrl:'/auth/logout',signedIn:!!user,displayName:user?.name||'Nhà sáng tạo',bridgeReady:!!env.DB&&!!env.BUCKET&&!!env.OAUTH_KV,storageReady:!!env.DB&&!!env.BUCKET,storageProvider:env.FILE_STORAGE_DRIVER,maxUploadBytes:env.FILE_MAX_BYTES},{headers:{'Cache-Control':'no-store'}});
+  const user=await readSession(request,env);return Response.json({executionMode:'codex',externalModelCalls:false,authProvider:'github',mcpUrl:publicOrigin(env)+'/mcp',loginUrl:'/auth/login',logoutUrl:'/auth/logout',signedIn:!!user,displayName:user?.name||'Nhà sáng tạo',bridgeReady:!!env.DB&&!!env.BUCKET&&!!env.OAUTH_KV,storageReady:!!env.DB&&!!env.BUCKET,storageProvider:env.FILE_STORAGE_DRIVER,maxUploadBytes:env.FILE_MAX_BYTES},{headers:{'Cache-Control':'no-store'}});
  }
  if(path.startsWith('/api/')){
   const user=await readSession(request,env);if(!user)return Response.json({error:'Đăng nhập GitHub để mở dữ liệu Xưởng.'},{status:401,headers:{'Cache-Control':'no-store'}});

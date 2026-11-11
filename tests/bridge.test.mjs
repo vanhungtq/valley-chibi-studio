@@ -10,6 +10,7 @@ function setup(){
  const db=new DatabaseSync(':memory:');
  const files=new Map();
  const env={DB:{prepare(sql){return {bind(...args){return {async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};},async run(){return {meta:{changes:Number(db.prepare(sql).run(...args).changes)}};}};}};}},BUCKET:{async put(k,b,options){files.set(k,{b:await new Response(b).arrayBuffer(),options});},async get(k){const f=files.get(k);return f?{body:f.b,arrayBuffer:async()=>f.b,httpMetadata:f.options.httpMetadata,customMetadata:f.options.customMetadata}:null;},async delete(k){files.delete(k);}}};
+ env.DB.batch=async statements=>{db.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());db.exec('COMMIT');return results;}catch(error){db.exec('ROLLBACK');throw error;}};
  const headers=owner=>owner?{'oai-authenticated-user-id':owner,'content-type':'application/json'}:{'content-type':'application/json'};
  async function api(path,method='GET',body,owner='alice'){const r=await handleApi(new Request('https://studio.test'+path,{method,headers:headers(owner),body:body?JSON.stringify(body):undefined}),env);return {status:r.status,body:await r.json()};}
  async function rpc(method,params={},owner='alice'){const r=await handleMcp(new Request('https://studio.test/mcp',{method:'POST',headers:headers(owner),body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),env);return await r.json();}
@@ -48,4 +49,68 @@ test('Designer saves ChatGPT 2x2 atlas, binds panels on submission and waits for
  const result=await x.tool('studio_submit_result',{task_id:t.id,claim_token:token,output:sampleOutput(4)});assert.equal(result.error,false,JSON.stringify(result.data));
  const saved=(await x.api('/api/state')).body,ep=saved.state.episodes[0];assert.equal(ep.storyboards.S01.panel,0);assert.equal(ep.storyboards.S04.panel,3);assert.equal(ep.stage,4);assert.deepEqual(ep.approved,[0,1,2,3]);assert.equal(saved.state.assets[0].category,'storyboard');assert.equal(saved.state.assets[0].id,a.data.id);
  assert.equal((await x.api('/api/state','PUT',saved)).status,200);assert.equal((await x.tool('studio_read_resource',{resource_id:a.data.id})).content[1].type,'image');
+});
+
+test('owner can hand off a running task to a fresh Codex session while keeping progress and files',async()=>{
+ const x=await initialized(),task=await queued(x),oldToken=await claimed(x,task.id);
+ await x.tool('studio_report_progress',{task_id:task.id,claim_token:oldToken,message:'Đã khảo sát brief. Còn đối chiếu ánh sáng.'});
+ const saved=await x.tool('studio_save_artifact',{task_id:task.id,claim_token:oldToken,filename:'checkpoint.md',mime:'text/markdown',encoding:'utf8',content:'Ý tưởng và những điểm cần làm tiếp.'});
+ assert.equal((await x.api('/api/tasks/'+task.id+'/handoff','POST',{},'bob')).status,404);
+ const handed=await x.api('/api/tasks/'+task.id+'/handoff','POST',{});
+ assert.equal(handed.status,200);assert.equal(handed.body.task.status,'queued');assert.equal(handed.body.task.id,task.id);
+ assert.match(handed.body.task.progress,/Còn đối chiếu ánh sáng/);assert.equal(handed.body.task.artifacts[0].id,saved.data.id);
+ assert.equal(handed.body.task.inputDigest,task.inputDigest);assert.equal(handed.body.task.leaseUntil,null);
+ assert.equal((await x.api('/api/tasks/'+task.id+'/handoff','POST',{})).status,200);
+ assert.equal(x.db.prepare('SELECT claim_token FROM codex_tasks WHERE id = ?').get(task.id).claim_token,null);
+ const attempts=[['studio_report_progress',{message:'Phiên cũ còn chạy'}],['studio_save_artifact',{filename:'late.md',mime:'text/markdown',encoding:'utf8',content:'Không được lưu'}],['studio_submit_result',{output:sampleOutput(0)}],['studio_fail_task',{message:'Phiên cũ báo lỗi'}]];
+ for(const [name,args] of attempts)assert.equal((await x.tool(name,{task_id:task.id,claim_token:oldToken,...args})).error,true,name);
+ assert.equal(x.files.size,1);
+ const packet=(await x.tool('studio_get_task',{task_id:task.id})).data;
+ assert.match(packet.task.progress,/Còn đối chiếu ánh sáng/);assert.equal(packet.task.artifacts[0].id,saved.data.id);
+ const newToken=await claimed(x,task.id);assert.notEqual(newToken,oldToken);
+ assert.match((await x.tool('studio_get_task',{task_id:task.id})).data.task.progress,/Còn đối chiếu ánh sáng/);
+ assert.match((await x.tool('studio_read_resource',{resource_id:saved.data.id})).content[0].text,/những điểm cần làm tiếp/);
+ assert.equal((await x.tool('studio_submit_result',{task_id:task.id,claim_token:newToken,output:sampleOutput(0)})).error,false);
+ assert.equal((await x.api('/api/tasks/'+task.id+'/handoff','POST',{})).status,409);
+ const final=(await x.api('/api/state')).body.state.episodes[0];assert.equal(final.stage,0);assert.deepEqual(final.approved,[]);assert.equal(final.outputs[0].artifacts[0].id,saved.data.id);
+});
+
+test('late submission cannot write project state after a handoff or cancellation wins the race',async()=>{
+ for(const action of ['handoff','cancel']){
+  const x=await initialized(),task=await queued(x),token=await claimed(x,task.id),before=(await x.api('/api/state')).body;
+  const batch=x.env.DB.batch.bind(x.env.DB);
+  x.env.DB.batch=async statements=>{x.env.DB.batch=batch;assert.equal((await x.api('/api/tasks/'+task.id+'/'+action,'POST',{})).status,200);return batch(statements);};
+  const late=await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)});
+  assert.equal(late.error,true,action);
+  const after=(await x.api('/api/state')).body;assert.equal(after.revision,before.revision);assert.deepEqual(after.state,before.state);
+  assert.equal((await x.api('/api/tasks')).body.tasks[0].status,action==='handoff'?'queued':'cancelled');
+ }
+});
+
+test('competing state edits or new files prevent partially committing a result',async()=>{
+ for(const action of ['state','artifact','expired']){
+  const x=await initialized(),task=await queued(x),token=await claimed(x,task.id);
+  const batch=x.env.DB.batch.bind(x.env.DB);
+  x.env.DB.batch=async statements=>{
+   x.env.DB.batch=batch;
+   if(action==='state'){const current=(await x.api('/api/state')).body;current.state.project.name='Tên vừa đổi';assert.equal((await x.api('/api/state','PUT',current)).status,200);}
+   if(action==='artifact')assert.equal((await x.tool('studio_save_artifact',{task_id:task.id,claim_token:token,filename:'new.md',mime:'text/markdown',encoding:'utf8',content:'Tư liệu mới lưu'})).error,false);
+   if(action==='expired')x.db.prepare('UPDATE codex_tasks SET lease_until = 0 WHERE id = ?').run(task.id);
+   return batch(statements);
+  };
+  assert.equal((await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)})).error,true,action);
+  const state=(await x.api('/api/state')).body.state;assert.equal(state.episodes[0].outputs[0],undefined);
+  const row=x.db.prepare('SELECT * FROM codex_tasks WHERE id = ?').get(task.id);assert.equal(row.status,'running');assert.equal(row.result_digest,null);
+  if(action==='state')assert.equal(state.project.name,'Tên vừa đổi');
+  if(action==='artifact')assert.equal(JSON.parse(row.artifacts).length,1);
+ }
+});
+
+test('task submission atomically initializes state when the project has not been persisted yet',async()=>{
+ const x=setup();x.db.exec(migrations);
+ const task=await queued(x),token=await claimed(x,task.id);
+ assert.equal((await x.api('/api/state')).body.revision,0);
+ const result=await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)});
+ assert.equal(result.error,false,JSON.stringify(result.data));assert.equal(result.data.revision,1);
+ assert.equal((await x.api('/api/state')).body.state.episodes[0].outputs[0].taskId,task.id);
 });

@@ -1,4 +1,6 @@
-Hãy triển khai repo này lên tài khoản Cloudflare của tôi bằng Cloudflare Workers Free + D1 + Workers KV (không dùng R2). Đọc AGENTS.md và docs/CLOUDFLARE.vi.md. Dùng nhánh có wrangler.jsonc, Node 24, npm ci, npm test, npm run check và npm run cf:check. Giữ nguyên các migration đã áp dụng.
+Nếu mục tiêu chỉ là đổi tài khoản Codex và tiếp tục Xưởng đang có, đọc docs/RESUME_CODEX.vi.md và dùng docs/CODEX_RESUME_PROMPT.vi.md; không triển khai lại. Các bước bên dưới dành cho yêu cầu cài hoặc cập nhật bản Cloudflare.
+
+Hãy triển khai repo này lên tài khoản Cloudflare của tôi bằng Cloudflare Workers Free + D1 + Workers KV (không dùng R2). Đọc AGENTS.md và docs/CLOUDFLARE.vi.md. Dùng nhánh main, Node 24, npm ci, npm test, npm run check và npm run cf:check. Giữ nguyên các migration đã áp dụng.
 
 MCP là Remote MCP Streamable HTTP tại https://<tên-miền-worker>/mcp, OAuth 2.1 với PKCE. Website đăng nhập GitHub; MCP dùng cùng danh tính github:<numeric-id>. Không tin các header oai-authenticated-* từ Internet. Các secret GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET phải nhập qua Cloudflare Settings hoặc Wrangler secret, không dán vào chat hay Git. PUBLIC_ORIGIN phải là origin HTTPS chính thức. Chỉ người trong GITHUB_ALLOWED_IDS hoặc GITHUB_ALLOWED_LOGINS được dùng dữ liệu.
 

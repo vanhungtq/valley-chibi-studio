@@ -1,0 +1,43 @@
+<!doctype html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đổi tài khoản Codex · Valley Studio</title><link rel="stylesheet" href="/assets/fonts.css"><style>body{margin:0;background:#f7f8f4;color:#263a31;font:14px/1.8 'Studio Sans',Arial}main{max-width:960px;margin:auto;padding:40px 24px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}a{color:#294b3e}</style></head><body><main><p><a href="/">← Về Xưởng</a> · <a href="/resume.html">Đổi Codex</a> · <a href="/codex-resume-prompt.txt" download>Prompt tiếp tục</a> · <a href="https://github.com/vanhungtq/valley-chibi-studio">GitHub</a></p><pre># Tiếp tục cùng Xưởng trên tài khoản Codex khác
+
+- Xưởng: https://valley-chibi-studio.vanhungtq1.workers.dev
+- MCP: https://valley-chibi-studio.vanhungtq1.workers.dev/mcp
+- Repo: https://github.com/vanhungtq/valley-chibi-studio
+
+Một Xưởng Cloudflare dùng được với nhiều tài khoản Codex/ChatGPT. D1 và KV giữ dự án, thư viện, đầu việc, tiến độ và kết quả đã đồng bộ. Danh tính chủ Xưởng là GitHub ID; Codex là nơi thực hiện công việc. Mỗi tài khoản Codex cấp quyền MCP riêng bằng cùng GitHub chủ Xưởng (`vanhungtq`). Không cần tạo lại Worker, D1/KV hoặc GitHub OAuth App khi đổi Codex.
+
+## 1. Bàn giao phần đang làm
+
+Chọn **Kết nối Codex** ở thanh điều hướng hoặc **Đổi Codex** trên đầu việc. Nếu phiên cũ còn hoạt động, yêu cầu nó báo tiến độ và lưu bản nháp cần giữ qua `studio_report_progress` / `studio_save_artifact`. Sau đó bấm **Bàn giao sang Codex khác**.
+
+Xưởng giữ cùng ID, snapshot, tiến độ và file; thu hồi claimToken cũ và đưa việc về hàng chờ. Phiên mới nhận token mới ngay; kết quả gửi muộn từ phiên cũ bị từ chối. Thao tác này không duyệt kết quả hay xóa dữ liệu. Chỉ chủ dự án thực hiện bàn giao trong giao diện; không có công cụ MCP tự giành quyền phiên đang chạy.
+
+Nếu phiên cũ đã đóng, vẫn có thể bàn giao từ giao diện. Nếu không bấm bàn giao, phiên mới nhận lại sau khi lease cũ hết hạn (15 phút kể từ lần nhận/gia hạn cuối). **Chỉ phần đã đồng bộ về Xưởng được tiếp tục.** Chat và file chỉ nằm trong Codex cũ không tự chuyển tài khoản.
+
+Đầu việc đã nộp vẫn chờ bạn duyệt, không làm lại. Nếu brief/tư liệu đã đổi và task bị stale, giao task mới từ đầu vào hiện tại.
+
+## 2. Kết nối trong tài khoản mới
+
+Trong Codex/ChatGPT mới có hỗ trợ custom MCP, thêm server theo URL ở trên, chọn OAuth, cho phép kết nối và đăng nhập cùng GitHub chủ Xưởng. Tên mục Apps/Plugins/MCP và quyền sử dụng tùy tài khoản/workspace. Kết nối của tài khoản cũ không tự xuất hiện trong tài khoản mới.
+
+Với Codex CLI có hỗ trợ Remote MCP và OAuth:
+
+```sh
+codex mcp add valley-studio --url https://valley-chibi-studio.vanhungtq1.workers.dev/mcp
+codex mcp login valley-studio
+```
+
+Nếu cấu hình đã có, kiểm tra `codex mcp list` rồi đăng nhập lại khi cần. Không sao chép bearer token, claimToken, cookie, file đăng nhập hoặc GitHub Client Secret giữa tài khoản. GitHub OAuth App được cấu hình một lần phía Cloudflare; Client ID/Secret đó không phải thông tin client MCP để dán vào Codex mới. Mỗi kết nối có grant/token riêng. GitHub khác không tự được chia sẻ dữ liệu của chủ Xưởng.
+
+## 3. Tiếp tục từ dữ liệu Cloudflare
+
+Bấm **Sao chép yêu cầu tiếp tục** trong Xưởng và dán vào phiên mới. Yêu cầu có URL và ID đầu việc thực tế. Bản tổng quát ở [CODEX_RESUME_PROMPT.vi.md](CODEX_RESUME_PROMPT.vi.md) và `/codex-resume-prompt.txt`.
+
+Codex đọc `studio_get_project`, `studio_list_tasks`, rồi `studio_get_task`. Đối chiếu dự án/tập, đọc tiến độ và artifact, đọc file cần thiết qua `studio_read_resource`, nhận bằng `studio_claim_task`. Tiếp tục làm, báo tiến độ, lưu file, nộp kết quả về cùng Xưởng rồi chờ bạn duyệt. Nếu chưa thấy công cụ MCP, hoàn tất kết nối rồi mở phiên mới; không giả lập đồng bộ hoặc mặc định có lịch sử chat cũ.
+
+## 4. Khi muốn tiếp tục sửa mã nguồn
+
+MCP của Xưởng phục vụ tiền kỳ, không cấp quyền sửa GitHub. Trong Codex mới, kết nối thêm GitHub với tài khoản được quyền đọc/ghi repo riêng tư này và cho ứng dụng truy cập repo. Đọc `AGENTS.md`, fetch `main` mới nhất, giữ thay đổi của chủ repo, kiểm tra rồi cập nhật trực tiếp `main`. Cloudflare tiếp tục deploy từ cùng repo, dùng lại D1/KV đã có.
+
+Chỉ tạo Worker, database hoặc Site mới khi bạn chủ động yêu cầu một Xưởng độc lập. Đổi Codex không chuyển chủ sở hữu Cloudflare/GitHub và không cần nhập lại thư viện. Mọi tác vụ sáng tạo vẫn thực hiện trong Codex/ChatGPT bằng công cụ của phiên hiện tại; các tài khoản dùng chung Xưởng dùng chung hạn mức Cloudflare của Xưởng.
+</pre></main></body></html>

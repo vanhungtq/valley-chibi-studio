@@ -101,6 +101,12 @@ Trong ảnh Zero Trust → Access controls → MCP Portals:
 
 Plugin Sites đã cài vẫn trỏ về Site cũ. Bản Cloudflare cần kết nối MCP riêng; không tự thay đổi endpoint của plugin Sites.
 
+### Dùng nhiều tài khoản Codex với cùng Xưởng
+
+Đổi tài khoản Codex chỉ cần kết nối lại cùng URL MCP và cấp quyền bằng cùng GitHub chủ Xưởng. Dữ liệu giữ ở Cloudflare; không cần tạo Worker/D1/KV hoặc GitHub OAuth App khác. Chọn **Kết nối Codex** để sao chép URL và yêu cầu tiếp tục có ID đầu việc. Với việc đang chạy, chủ dự án có thể bấm **Bàn giao sang Codex khác**: phiên cũ mất claim, tiến độ/file giữ lại, phiên mới nhận token mới ngay. Kết quả vẫn chờ bạn duyệt.
+
+[Hướng dẫn chuyển tài khoản](RESUME_CODEX.vi.md) và [prompt tiếp tục](CODEX_RESUME_PROMPT.vi.md) phân biệt kết nối lại, sửa mã GitHub và tạo Xưởng mới. Chat/file chưa đồng bộ không tự chuyển tài khoản. Mỗi tài khoản/workspace cần hỗ trợ custom MCP; không sao chép thông tin đăng nhập giữa các tài khoản.
+
 ## 5. Kiểm tra sau cài
 
 Mở /healthz: databaseReady, filesReady, oauthStorageReady và authConfigured cần là true. Kiểm tra chỉ phản ánh cấu hình/schema, không thay thế đăng nhập thật.
