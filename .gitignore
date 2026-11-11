@@ -6,3 +6,5 @@ node_modules/
 .sites-runtime/
 .wrangler/
 outputs/
+!.dev.vars.example
+.cloudflare-build/

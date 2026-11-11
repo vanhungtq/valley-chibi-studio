@@ -2,6 +2,7 @@ export const esc=(s='')=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'
 export const safeUrl=(s='')=>{try{const u=new URL(s,location.origin);return ['https:','http:'].includes(u.protocol)?u.href:'#';}catch{return '#';}};
 export const icon=(name,cls='')=>`<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]||ICONS.sparkles}</svg>`;
 const ICONS={
+ expand:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
  grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
  leaf:'<path d="M20 3C9 2 3 8 5 15s15 5 15-12Z"/><path d="M4 21 15 10M9 15v-5m0 5h5"/>',
  mountain:'<path d="m2 20 8-15 5 9 3-6 5 12Z"/><path d="m7 11 3 3 3-3"/>',

@@ -4,11 +4,45 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "test": "node --test tests/*.test.mjs",
-    "check": "node --check worker/api.js && node --check worker/bridge.js && node --check worker/mcp.js && node --check public/app.js && node --check public/scene.js && node --check public/exports.js"
+    "build": "node scripts/build-cloudflare.mjs",
+    "test": "npm run test:unit && npm run test:cloudflare",
+    "check": "node --check worker/api.js && node --check worker/bridge.js && node --check worker/mcp.js && node --check public/app.js && node --check public/scene.js && node --check public/exports.js && node --check public/storyboard.js && node --check public/references.js && node --check public/theme-init.js && node --check public/theme.js && node --check public/motion.js && node --check public/scene-controls.js && node --check worker/cloudflare.js && node --check worker/cloudflare/security.js && node --check worker/cloudflare/github.js && node --check worker/cloudflare/auth.js",
+    "build:cloudflare": "node scripts/build-cloudflare.mjs",
+    "build:sites": "node scripts/build.mjs",
+    "dev": "wrangler dev --local-protocol https",
+    "deploy": "node scripts/deploy-cloudflare.mjs",
+    "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
+    "cf:migrate": "wrangler d1 migrations apply DB --remote",
+    "cf:migrate:local": "wrangler d1 migrations apply DB --local",
+    "cf:check": "wrangler deploy --dry-run --outdir .cloudflare-build",
+    "test:cloudflare": "npm run cf:check && node --test tests/cloudflare.integration.mjs",
+    "test:unit": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "linkedom": "^0.18.15"
+    "linkedom": "^0.18.15",
+    "miniflare": "5.20261110.0-beta",
+    "wrangler": "4.160.0"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "cloudflare": {
+    "bindings": {
+      "GITHUB_CLIENT_ID": {
+        "description": "Client ID của GitHub OAuth App. Callback: https://<worker-domain>/auth/callback."
+      },
+      "GITHUB_CLIENT_SECRET": {
+        "description": "Client Secret của GitHub OAuth App. Lưu trong Worker secrets, không commit."
+      },
+      "PUBLIC_ORIGIN": {
+        "description": "URL HTTPS chính thức của Worker, không có dấu / cuối."
+      },
+      "GITHUB_ALLOWED_LOGINS": {
+        "description": "GitHub login được cấp quyền, phân cách bằng dấu phẩy. Để trống sẽ từ chối đăng nhập."
+      }
+    }
   }
 }

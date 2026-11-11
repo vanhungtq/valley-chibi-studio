@@ -1,10 +1,33 @@
-# Valley Chibi Studio · Codex Edition
+# Valley Chibi Studio · Cloudflare + Codex
 
 Xưởng tiền kỳ YouTube đời sống nông thôn hướng tới khán giả quốc tế: 5 vai trò, giao diện chibi 3D, thư viện theo dự án/tập, kịch bản, storyboard và hồ sơ quay.
 
 **Mọi công việc sáng tạo thực hiện trong Codex.** Xưởng chỉ lưu dữ liệu, giao việc, nhận tiến độ và kết quả qua plugin MCP riêng của Site. Không gọi API mô hình bên ngoài và không cần API key mô hình.
 
-## Cài sang tài khoản ChatGPT khác
+## Cài trên Cloudflare từ GitHub
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fvanhungtq%2Fvalley-chibi-studio%2Ftree%2Fcodex%2Fcloudflare-deploy)
+
+Chọn **Workers & Pages → Create application → Continue with GitHub**. Dùng nhánh `codex/cloudflare-deploy` để cài bản này trước khi merge vào `main`.
+
+| Mục | Giá trị |
+|---|---|
+| Root directory | `/` |
+| Build command | `npm run build:cloudflare` |
+| Deploy command | `npm run deploy:cloudflare` |
+| Node.js | 24 |
+| Worker entry | `worker/cloudflare.js` |
+| Lưu trữ | D1 `DB`, R2 `BUCKET`, KV `OAUTH_KV` |
+| MCP | Remote MCP, **Streamable HTTP**, `https://<domain>/mcp` |
+| Xác thực | **OAuth 2.1 + PKCE**, đăng nhập GitHub, allowlist |
+
+**[Hướng dẫn Cloudflare chi tiết bằng tiếng Việt](docs/CLOUDFLARE.vi.md)** · [Prompt cài đặt](docs/CLOUDFLARE_INSTALL_PROMPT.vi.md)
+
+Bản này chạy độc lập với Sites. Tạo GitHub OAuth App với callback `https://<domain>/auth/callback`; đặt `PUBLIC_ORIGIN`, allowlist GitHub và hai secret của OAuth App trong Worker. AI và tạo ảnh vẫn thực hiện trong ChatGPT/Codex qua MCP; không cần khóa API mô hình. Plugin Sites cũ không tự chuyển sang domain Cloudflare. Không dùng Pages static cho bản này.
+
+Sau deploy, kiểm tra `/healthz`, đăng nhập website rồi thêm custom MCP vào ChatGPT/Codex bằng URL `/mcp`. Mục Zero Trust **MCP servers / Server portals** là lớp quản lý/gom server tùy chọn; một Xưởng riêng có thể kết nối thẳng MCP.
+
+## Cài bằng Sites trong tài khoản ChatGPT khác (tùy chọn)
 
 - [Hướng dẫn đầy đủ](docs/INSTALL.vi.md)
 - [Prompt cài đặt để dán vào Codex](docs/INSTALL_PROMPT.vi.md)
@@ -42,6 +65,26 @@ Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → 
 - Tập mẫu có 6 cảnh, 24 shot, 480 giây mục tiêu dựng. Nội dung mẫu được gắn nhãn riêng.
 - Đăng nhập Sites, D1 cho bản ghi, R2 theo tài khoản; JSON sao lưu không chứa file nhị phân.
 
+## Storyboard ChatGPT & thư viện tri thức có hình
+
+- Storyboard → **Tạo ảnh bằng ChatGPT**: chia shot list thành nhóm 4, sao chép prompt cho một ảnh 2×2 không viền. Designer nhận cùng hướng dẫn qua MCP. Không gọi API mô hình bên ngoài.
+- **Nhập ảnh 4 shot**: chọn nhóm hoặc gán riêng từng ô, tải ảnh lên, cắt bằng Canvas của trình duyệt và lưu từng JPEG vào R2. Ảnh AI có nhãn riêng, được đưa vào production book và tải theo từng shot.
+- Designer có thể dùng `studio_save_artifact` với trường tùy chọn `storyboard_shot_ids` (1–4 ID theo thứ tự trên trái, trên phải, dưới trái, dưới phải). Tối đa 1 MB/ảnh. Sau `studio_submit_result`, Xưởng liên kết các ô vào shot và dừng chờ duyệt. Bản gốc được lưu một lần; giao diện/HTML cắt theo ô, tải từng ảnh sẽ cắt JPEG thực tế.
+- Tri thức → **Thêm kiến thức**: ảnh minh họa kỹ thuật có thể tải trực tiếp, không cần URL. Video mẫu có file MP4/MOV hoặc URL nguồn, kênh/tác giả, ảnh minh họa và tối đa 200 shot theo thứ tự.
+- Mỗi shot reference có timecode, ảnh góc quay, cỡ cảnh, tiêu cự nếu biết, chuyển động và chú thích. Có thể lấy khung hình từ video đã lưu tại vị trí đang dừng, thêm/xóa/đổi thứ tự shot và tìm theo nội dung phân tích.
+- Gói Codex giữ toàn bộ ảnh/video liên kết với reference được chọn, kể cả ngoài 16 tài nguyên gợi ý ban đầu. Ghi rõ số nguồn đã chọn. Agent đọc ảnh thật và dẫn nguồn, học nguyên tắc để vận dụng vào câu chuyện riêng.
+- Giới hạn hiện tại: 30 MB/tệp tải từ giao diện, 5 MB/lượt đọc MCP, 1 MB/file Codex nộp. Video lớn hơn dùng URL và ảnh shot; URL chưa được tự động tải, xem hoặc chép lời. Ghép 4 shot giảm số lần tạo ảnh nhưng không bảo đảm tỷ lệ tiết kiệm token.
+
+## Giao diện sáng/tối và xưởng 3D
+
+- Nút mặt trăng/mặt trời ở thanh trên cùng đổi nhanh Sáng/Tối. Thiết lập dự án → Giao diện & không gian có Sáng, Tối và Theo hệ thống. Lựa chọn lưu trên trình duyệt, áp dụng trước khi vẽ trang để tránh chớp nền sáng.
+- Xưởng Three.js có bốn nhân viên phụ không gắn nhãn: đi trong lối đi, dừng làm việc, mang tài liệu/khay trà. Năm cộng sự chính giữ nhãn và trạng thái theo đầu việc thật; chuyển động trang trí không đại diện cho tác vụ Codex đang chạy.
+- Kéo chuột xoay 360° và đổi góc cao/thấp, cuộn zoom, chụm hai ngón để zoom trên cảm ứng. Khi canvas có focus, phím mũi tên xoay, cộng/trừ zoom, 0/Home đặt lại góc nhìn. Có nút tự xoay, tạm dừng chuyển động và toàn màn hình nếu trình duyệt cho phép.
+- Camera giữ góc nhìn khi giao diện cập nhật; tường tự mờ khi quay ra phía sau. Ánh sáng xưởng đổi theo theme, đèn trần và màn hình sáng hơn vào chế độ tối. Cây, đèn treo, quạt, mèo và bụi sáng có chuyển động nhẹ.
+- Three.js r169 được đóng gói tại Site. GSAP 3.13.0 tải từ jsDelivr với bản dự phòng cùng phiên bản trong `public/vendor/`; CSP chỉ mở thêm nguồn script CDN này. Không có model API hoặc nội dung dự án gửi đến CDN.
+- Mặc định tôn trọng `prefers-reduced-motion`; có nút bật/tắt chuyển động. Dừng hoạt ảnh khi tab ẩn hoặc xưởng ngoài vùng nhìn; giải phóng timeline và tài nguyên GPU khi rời xưởng.
+- Kiểm thử DOM và toán học camera/lộ trình không thay thế kiểm tra WebGL, cảm ứng và toàn màn hình trên trình duyệt thật.
+
 ## Công cụ MCP
 
 | Công cụ | Mục đích |
@@ -61,6 +104,11 @@ Tên công cụ trên phiên ChatGPT/Codex có thể được thêm tiền tố 
 ## Mã nguồn và kiểm tra
 
 ```text
+wrangler.jsonc         Cấu hình Cloudflare Workers + D1/R2/KV/assets
+worker/cloudflare.js   Entry độc lập và kiểm tra danh tính
+worker/cloudflare/     GitHub login, session, consent OAuth
+.github/workflows/     CI Node 24, tests và build
+docs/CLOUDFLARE.vi.md  Hướng dẫn cài Cloudflare/GitHub/MCP
 public/               Giao diện, scene chibi, mẫu, xuất tài liệu
 worker/api.js         Identity, state revision, upload, chạy mẫu
 worker/bridge.js      Queue, claim, tiến độ, file, nộp và duyệt
@@ -73,7 +121,7 @@ prompts/ trong docs/        Instruction 5 vai trò
 AGENTS.md             Chính sách cho Codex
 ```
 
-Dùng Node 24:
+Dùng Node 24. `npm run build` mặc định chuẩn bị bản Cloudflare; bản Sites dùng `npm run build:sites`:
 
 ```sh
 npm ci
@@ -82,7 +130,7 @@ npm run check
 npm run build
 ```
 
-`linkedom` chỉ là dev dependency. Không có dependency runtime gọi mô hình. `dist/server/index.js` là Worker ESM chứa assets và handler. `.openai/hosting.json` dùng `d1: "DB"`, `r2: "BUCKET"`, `capabilities: ["mcp"]`.
+`linkedom`, Wrangler và Miniflare là dev dependencies. Runtime OAuth dùng `@cloudflare/workers-oauth-provider`; không có dependency runtime gọi mô hình. `npm run build:sites` tạo `dist/server/index.js`, Worker ESM chứa assets và handler của bản Sites. Cloudflare dùng trực tiếp `worker/cloudflare.js` và Workers Static Assets. `.openai/hosting.json` dùng `d1: "DB"`, `r2: "BUCKET"`, `capabilities: ["mcp"]`.
 
 Khi triển khai, dùng quy trình Sites hiện có, giữ manifest của đúng Site và đóng gói cả thư mục `drizzle/`. Migration đã áp dụng là bất biến; append migration khi đổi schema. GitHub giữ bản phân phối không chứa Site ID; checkout đang triển khai phải giữ Site ID của nó.
 
@@ -97,7 +145,7 @@ Lệnh này cần đích chưa tồn tại, ở ngoài checkout. Không chép Gi
 - Xưởng không tự chạy Codex khi không có phiên nhận việc. Đồng bộ giao diện bằng thăm dò mỗi 5 giây khi mở trang.
 - Tải thư viện tối đa 30 MB/tệp; đọc qua MCP tối đa 5 MB/lượt; file Codex nộp qua MCP tối đa 1 MB/tệp, tuần tự. Chưa có chunk upload.
 - Xem PDF/video, sinh ảnh và dựng PDF chất lượng cao phụ thuộc công cụ sẵn có trong Codex. Metadata/URL không chứng minh nội dung đã được đọc.
-- Snapshot chọn tài nguyên bằng từ khóa, tối đa 16 file và 10 reference trong phạm vi liên quan. Chưa có OCR/transcript tự động, embeddings hoặc vector database phía máy chủ.
+- Snapshot chọn tài nguyên bằng từ khóa, tối đa 16 file và 10 reference trong phạm vi liên quan. Chưa có OCR/transcript tự động, embeddings hoặc vector database phía máy chủ. Metadata thư viện vẫn nằm trong JSON dự án; bản tổ chức Cloudflare chưa thêm FTS/phân trang riêng.
 - Các frame chưa gắn ảnh dùng sơ đồ SVG minh họa. Không trình bày như storyboard được sinh từ ảnh thật.
 - Các bài kiểm tra API/MCP/DOM không thay thế kiểm tra trực quan WebGL và bản in; môi trường xây bản đầu chưa cung cấp công cụ browser QA.
 - GitHub lưu mã nguồn và hướng dẫn. Dữ liệu và upload thật vẫn ở Site của chủ sở hữu; chuyển tài khoản cần tải lại và liên kết file dưới tài khoản mới.

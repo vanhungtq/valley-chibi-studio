@@ -1,0 +1,2 @@
+// Runs before styles are painted to restore the visitor's display preference.
+(()=>{let preference='system';try{preference=localStorage.getItem('valley-theme')||'system';}catch{}if(!['light','dark','system'].includes(preference))preference='system';const dark=preference==='dark'||preference==='system'&&window.matchMedia?.('(prefers-color-scheme: dark)').matches;document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light';})();

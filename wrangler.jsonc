@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "valley-chibi-studio",
+  "main": "worker/cloudflare.js",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {"directory": "./public", "binding": "ASSETS", "run_worker_first": true},
+  "build": {"command": "npm run build:cloudflare"},
+  "vars": {
+    "PUBLIC_ORIGIN": "",
+    "GITHUB_ALLOWED_LOGINS": "",
+    "GITHUB_ALLOWED_IDS": ""
+  },
+  // Wrangler/Deploy to Cloudflare can provision missing IDs on first deploy.
+  // For existing resources, add their database_id/id/bucket_name here.
+  "d1_databases": [{"binding": "DB", "database_name": "valley-chibi-studio", "migrations_dir": "drizzle"}],
+  "r2_buckets": [{"binding": "BUCKET", "bucket_name": "valley-chibi-studio-files"}],
+  "kv_namespaces": [{"binding": "OAUTH_KV"}]
+}

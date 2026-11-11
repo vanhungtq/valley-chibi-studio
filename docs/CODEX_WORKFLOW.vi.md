@@ -48,3 +48,9 @@ Nội dung phân tích chất lượng do Codex chịu trách nhiệm, không ph
 Giữ cách kể từ hành động và âm thanh đời sống. Chỉ đưa bối cảnh, người và đạo cụ thật vào hồ sơ quay khi đã đọc tư liệu. Tập “Ngày đầu ở thung lũng mận” đi từ con đường, mở nhà, dọn một góc, sửa mái hiên thử, bữa cơm tới căn nhà sáng đèn. Tách khối lượng cải tạo và lịch quay khỏi một ngày được kể trong phim. Không mặc định hai người tự hoàn thành công việc mái hoặc kết cấu lớn.
 
 Mở rộng bằng chức năng quản lý tri thức, trợ lý sản xuất, continuity và biên tập quốc tế khi số tập tăng. Chưa có các agent phụ tự chạy; có thể thực hiện các kiểm tra đó trong trách nhiệm năm vai trò hiện tại.
+
+## Storyboard và học từ video mẫu
+
+Designer dùng tính năng tạo ảnh ChatGPT, nhóm tối đa 4 shot trong ảnh 2×2 không viền, theo thứ tự trên trái, trên phải, dưới trái, dưới phải. Nộp ảnh qua studio_save_artifact với storyboard_shot_ids, sau đó studio_submit_result. Ảnh được liên kết đúng shot và dừng chờ duyệt. Ảnh quá 1 MB có thể nhập tại tab Storyboard để cắt và lưu từng ô. Đây là ảnh AI dự kiến quay, không phải ảnh hiện trường.
+
+Trong Tri thức & reference, tải ảnh kỹ thuật trực tiếp hoặc video mẫu MP4/MOV (30 MB/tệp); thêm từng shot có timecode, ảnh góc máy và chú thích tùy chọn. Video lớn hơn giữ URL nguồn và ảnh các shot. Có thể chụp khung hình tại vị trí đang dừng từ video đã lưu. Gói giao việc đưa phân tích và ID ảnh/video liên quan cho Codex đọc. Agent trích nguồn, áp dụng nguyên tắc vào câu chuyện riêng và nêu rõ phần chưa kiểm chứng.

@@ -6,6 +6,14 @@ All creative work is performed in the user's current Codex / ChatGPT session, us
 
 The Site is a control room: it stores the project, hosts the Chibi interface, queues work, and synchronizes real progress and files through its own MCP plugin. Clicking a button queues a task; it does not start a hidden Codex session. Never display or report work as running before a successful claim.
 
+## Self-hosted Cloudflare from GitHub
+
+For a Cloudflare request, follow `docs/CLOUDFLARE.vi.md` and use `wrangler.jsonc`, `worker/cloudflare.js`, D1 `DB`, R2 `BUCKET`, KV `OAUTH_KV`, and Workers Static Assets. Do not register or republish a Site for this deployment mode. `npm run build` / `build:cloudflare` prepares Cloudflare assets; `npm run build:sites` retains the original Sites build.
+
+MCP is a stateless remote Streamable HTTP endpoint at `/mcp` using OAuth 2.1, PKCE S256, and GitHub for user identity. Keep incoming `oai-authenticated-*` headers untrusted on Cloudflare: only inject identity after checking a server-side session or OAuth token. Website and MCP share `github:<numeric-id>`. Every request rechecks the configured GitHub allowlist. Never expose GitHub OAuth secrets in source or chat, and never replace authenticated MCP with a public no-auth endpoint for convenience.
+
+Deployment is ready only after resource provisioning, D1 migrations, PUBLIC_ORIGIN/allowlist, and GitHub OAuth secrets are configured in the owner's account. A local dry-run or mocked OAuth test is not a production deployment or successful real GitHub/ChatGPT account link. State remains JSON in D1; this installation work does not imply indexed library search was implemented. Sites data/uploads do not transfer automatically.
+
 ## Installing in another ChatGPT account
 
 1. Read `docs/INSTALL.vi.md` and `docs/INSTALL_PROMPT.vi.md`.
@@ -36,3 +44,10 @@ The five roles are specialist responsibilities, not a claim that five background
 - Schema changes append migrations and journal entries; do not rewrite already applied SQL.
 - Keep user uploads, live project records, identities, tokens, runtime state, `node_modules`, and deployment archives out of Git.
 - Source export must remove the current account's `project_id` while preserving the live checkout's manifest. Use `scripts/export-handoff.mjs`.
+
+## Image storyboards and reference knowledge
+
+- Use ChatGPT's available image generation tool for Designer storyboards. Batch at most four shots per 2×2 image, no gutters or text, with stable identities and scene continuity. Preserve shot IDs; panel order is top-left, top-right, bottom-left, bottom-right. Leave unused final panels blank.
+- Save an atlas via `studio_save_artifact` with optional `storyboard_shot_ids`, then submit normally. The server registers the image and panel mappings at submission, before human review. Do not write state directly during a claimed task. If the current tool surface lacks this optional field or the image exceeds 1 MB, tell the user to import the atlas in Storyboard; do not claim synchronization succeeded.
+- Read technique `imageIds`, reference `videoId`, and per-shot `imageId` resources in the packet. Treat annotations as user observations; distinguish them from media you have personally inspected. Cite reference IDs and resource IDs. A video URL alone is not evidence of its contents.
+- Manual atlas import performs real JPEG crops in the browser. MCP atlases retain one original with panel mappings; per-shot download crops actual image files. Both appear in exported production books with AI labels.

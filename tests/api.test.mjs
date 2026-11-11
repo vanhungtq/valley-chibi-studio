@@ -43,3 +43,26 @@ test('unsupported file types are rejected before storing',async()=>{const {call,
 test('state cannot reference another account file key',async()=>{const {call}=fixture();const state=seedState(),id=crypto.randomUUID();state.assets.push({id,key:'users/bob/'+id,name:'private.jpg',mime:'image/jpeg',size:12,url:'/api/files/'+id,category:'context',description:'',tags:'',episodeId:null});assert.equal((await call('/api/state','PUT',{state,revision:0})).status,400);});
 test('invalid shots and malformed references fail without changing saved state',async()=>{const {call}=fixture();const s=seedState();s.episodes[0].scenes[0].shots[0].seconds=-1;assert.equal((await call('/api/state','PUT',{state:s,revision:0})).status,400);const next=seedState();next.references.push({id:'test',title:'bad',note:'bad',url:'javascript:alert(1)',kind:'reference',tags:''});assert.equal((await call('/api/state','PUT',{state:next,revision:0})).status,400);assert.equal((await call('/api/state')).body.revision,0);});
 test('exports escape HTML, contain all shots, and guard spreadsheet formula cells',()=>{assert.equal(esc('<script>"&'), '&lt;script&gt;&quot;&amp;');const state=seedState(),e=state.episodes[0];e.scenes[0].shots[0].action='=IMPORTXML("evil")';const csv=shotCsv(e);assert.ok(csv.includes('"\'=IMPORTXML'));assert.equal(csv.split('\r\n').length,25);assert.equal(JSON.parse(projectJson(state)).format,'valley-studio-backup');const svg=storyboardSvg(e.scenes[0],e.scenes[0].shots[0]);assert.match(svg,/Sơ đồ bố cục minh họa/);assert.ok(!svg.includes('IMPORTXML'));});
+
+test('image-only techniques and video shot breakdowns persist and reject missing, foreign-scope or duplicate links',async()=>{
+ const {call}=fixture(),s=seedState(),id=crypto.randomUUID(),videoId=crypto.randomUUID();
+ const asset=(id,mime)=>({id,key:'users/alice/'+id,url:'/api/files/'+id,name:'reference',mime,size:12,category:'reference',description:'',tags:'',episodeId:null});
+ s.assets.push(asset(id,'image/jpeg'),asset(videoId,'video/mp4'));
+ s.references.push({id:'technique',title:'Góc máy thấp',kind:'technique',url:'',note:'',tags:'góc máy',imageIds:[id],videoId:'',shots:[]},{id:'video',title:'Video mẫu hoàn chỉnh',kind:'reference',url:'https://example.com/video',note:'Nhịp dựng',tags:'',imageIds:[],videoId,shots:[{id:'ref-shot-1',title:'Mở đầu',timecode:'00:12–00:18',size:'Toàn cảnh',lens:'',move:'Tĩnh',note:'',imageId:id}]});
+ const rev=await save(call,s,0);assert.equal((await call('/api/state')).body.state.references[1].shots[0].imageId,id);
+ s.references[1].shots.push({...s.references[1].shots[0]});assert.equal((await call('/api/state','PUT',{state:s,revision:rev})).status,400);s.references[1].shots.pop();
+ s.references[1].shots[0].imageId='missing';assert.equal((await call('/api/state','PUT',{state:s,revision:rev})).status,400);s.references[1].shots[0].imageId=id;
+ s.assets[0].episodeId='ep-01';assert.equal((await call('/api/state','PUT',{state:s,revision:rev})).status,400);
+});
+test('task resource selection keeps linked reference images beyond the first 16 assets',async()=>{
+ const {chooseResources}=await import('../worker/api.js'),s=seedState();
+ for(let i=0;i<25;i++)s.assets.push({id:'image-'+i,episodeId:null,name:'ảnh',description:'',tags:''});
+ s.references.push({id:'ref',title:'Kỹ thuật',kind:'technique',note:'',imageIds:['image-24'],shots:[{imageId:'image-23'}]});
+ const selected=chooseResources(s,s.episodes[0]);assert.ok(selected.assets.some(a=>a.id==='image-24'));assert.ok(selected.assets.some(a=>a.id==='image-23'));assert.equal(selected.selection.includedAssets,18);
+});
+test('private video range reads preserve user scoping and return seekable partial content',async()=>{
+ const {call,env}=fixture(),id=crypto.randomUUID();let requested;
+ env.BUCKET.get=async(key,options)=>{requested={key,options};return {size:100,range:{offset:20,length:10},body:new Uint8Array(10),httpMetadata:{contentType:'video/mp4'}};};
+ const response=await handleApi(new Request('https://studio.test/api/files/'+id,{headers:{'oai-authenticated-user-id':'alice',range:'bytes=20-29'}}),env);
+ assert.equal(response.status,206);assert.equal(response.headers.get('content-range'),'bytes 20-29/100');assert.equal(requested.key,'users/alice/'+id);assert.equal(requested.options.range.get('range'),'bytes=20-29');
+});

@@ -1,0 +1,120 @@
+<!doctype html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cài Cloudflare · Valley Studio</title><link rel="stylesheet" href="/assets/fonts.css"><style>body{margin:0;background:#f7f8f4;color:#263a31;font:14px/1.8 'Studio Sans',Arial}main{max-width:960px;margin:auto;padding:40px 24px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}a{color:#294b3e}</style></head><body><main><p><a href="/">← Về Xưởng</a> · <a href="https://github.com/vanhungtq/valley-chibi-studio">GitHub</a></p><pre># Cài Valley Chibi Studio trên Cloudflare từ GitHub
+
+Đây là bản Workers độc lập: giao diện + API + Remote MCP cùng một Worker, D1 lưu dự án/đầu việc, R2 lưu file, KV lưu phiên đăng nhập và OAuth. Giữ đầy đủ storyboard ảnh ChatGPT, thư viện Reference, Dark Mode và chibi 3D.
+
+## 1. Chọn đúng nơi trong ảnh Cloudflare
+
+Workers &amp; Pages → Create application → Continue with GitHub → chọn repo vanhungtq/valley-chibi-studio.
+
+Dùng nhánh codex/cloudflare-deploy chứa wrangler.jsonc, hoặc main sau khi merge. Không chọn Continue to Pages hoặc Upload static files: app cần Worker API và MCP.
+
+Root directory: /
+Build command: npm run build:cloudflare
+Deploy command: npm run deploy:cloudflare
+Node.js: 24 (đặt NODE_VERSION=24 trong Build variables nếu cần)
+
+Nếu dùng Deploy to Cloudflare button, Cloudflare có thể sao chép repo sang một repo mới. Muốn cập nhật chính repo của bạn thì dùng Continue with GitHub ở trên.
+
+## 2. Lưu trữ và migration
+
+wrangler.jsonc khai báo:
+- D1 binding DB — database mặc định valley-chibi-studio.
+- R2 binding BUCKET — bucket mặc định valley-chibi-studio-files.
+- KV binding OAUTH_KV — dữ liệu OAuth và phiên đăng nhập.
+- Assets binding ASSETS — thư mục public/.
+
+Wrangler mới có thể tạo resource còn thiếu trong lần deploy đầu. Cloudflare có thể yêu cầu bật R2/billing trước khi tạo bucket; phí và hạn mức theo tài khoản của bạn. Nếu đã có resource, điền database_id/id/bucket_name thực tế vào đúng binding trong wrangler.jsonc. Không dùng ID của tài khoản khác.
+
+Lệnh deploy tự áp dụng toàn bộ drizzle/*.sql qua binding DB. Lần đầu chưa có database_id, script deploy Worker để provision resource trước rồi chạy migration. Khi có database_id, migration chạy trước bản code mới. Không sửa hoặc xóa migration đã áp dụng. Sau lần đầu, lưu các ID resource thực tế vào GitHub để các lần build tiếp theo sử dụng đúng kho.
+
+Chỉ cho nhánh production triển khai production. Tắt automatic deploy nhánh thử nghiệm, hoặc dùng Worker/D1/R2/KV riêng cho staging; không chạy migration production từ preview PR.
+
+## 3. Thiết lập đăng nhập GitHub
+
+Sau lần deploy đầu, lấy URL Worker thực tế, ví dụ https://valley-chibi-studio.&lt;account&gt;.workers.dev. App chưa cho đọc/ghi dữ liệu khi chưa cấu hình đăng nhập.
+
+GitHub → Settings → Developer settings → OAuth Apps → New OAuth App:
+- Application name: Valley Chibi Studio
+- Homepage URL: URL Worker thực tế
+- Authorization callback URL: URL Worker + /auth/callback
+
+Trong Cloudflare Worker → Settings → Variables and Secrets, đặt:
+- PUBLIC_ORIGIN: URL Worker thực tế, HTTPS, không có dấu / cuối hoặc đường dẫn.
+- GITHUB_ALLOWED_LOGINS: GitHub username của bạn, ví dụ vanhungtq. Nhiều người thì cách nhau bằng dấu phẩy.
+- Hoặc GITHUB_ALLOWED_IDS: numeric GitHub user ID. ID ổn định khi đổi username.
+- GITHUB_CLIENT_ID: Client ID của OAuth App — lưu dạng Secret.
+- GITHUB_CLIENT_SECRET: Client Secret — lưu dạng Secret.
+
+Không nhập secret vào GitHub, hình chụp công khai hoặc chat. Không cần khóa API mô hình.
+
+PUBLIC_ORIGIN và allowlist cũng có thể ghi vào vars trong wrangler.jsonc. Nếu chỉnh chúng ở Dashboard, đồng bộ lại vars tương ứng trong GitHub trước lần deploy tiếp theo để cấu hình nguồn không ghi đè. Hai secret không đặt trong vars.
+
+Nếu dùng custom domain, cập nhật PUBLIC_ORIGIN và GitHub OAuth callback cho domain mới. Dùng một origin chính thức; hostname khác bị từ chối. Không đặt Cloudflare Access login HTML trước /mcp, /oauth/*, /authorize hay /.well-known/* vì MCP client cần tự thực hiện OAuth. Bản này tự xác thực các endpoint đó.
+
+Đăng nhập giao diện bằng nút Đăng nhập. Chỉ GitHub user trong allowlist truy cập được dữ liệu; mỗi numeric ID có dự án và file riêng. Cookie đăng nhập là HttpOnly/Secure và dữ liệu API có kiểm tra Origin cho thao tác ghi.
+
+## 4. Dùng loại MCP nào?
+
+Loại: Remote MCP.
+Transport: Streamable HTTP, stateless.
+URL: https://&lt;domain-worker&gt;/mcp
+Authentication: OAuth 2.1, authorization code + PKCE S256.
+Client registration: hỗ trợ CIMD và Dynamic Client Registration.
+Scope: studio:access; offline_access cho duy trì kết nối.
+
+Không dùng stdio cho app web này. GET /mcp trả 405 là hợp lệ: server nhận POST JSON-RPC và trả application/json; không cần một luồng SSE thường trực.
+
+ChatGPT/Codex → khu vực quản lý app/plugin hoặc MCP server → thêm server riêng → nhập URL /mcp, chọn OAuth nếu có yêu cầu. Tên mục cụ thể tùy tài khoản và giao diện; khả năng thêm custom MCP cần được bật cho tài khoản/workspace. Khi kết nối, Xưởng hiện màn hình cho phép trước, sau đó đăng nhập GitHub. Dùng cùng tài khoản GitHub với giao diện để thấy cùng dự án.
+
+Nếu giao diện yêu cầu Client ID/Client Secret của MCP, dùng đăng ký client phù hợp với cấu hình đó; không nhập GitHub Client Secret vào ô MCP. GitHub OAuth App là bước đăng nhập phía server, khác client OAuth ChatGPT/Codex. Bản này công bố endpoint /oauth/register để client hỗ trợ DCR đăng ký tự động và công bố CIMD cho client hỗ trợ.
+
+Các endpoint discovery:
+- /.well-known/oauth-protected-resource
+- /.well-known/oauth-authorization-server
+- /authorize
+- /oauth/token
+- /oauth/register
+
+Trong ảnh Zero Trust → Access controls → MCP Portals:
+- Tab MCP servers dùng để khai báo/quản lý một server MCP đã chạy.
+- Server portals dùng để gom nhiều server và áp chính sách tập trung.
+- Một Xưởng riêng có thể kết nối thẳng URL /mcp vào ChatGPT/Codex, chưa cần tạo Portal. Portal là lớp bổ sung tùy chọn, cần kiểm tra luồng OAuth riêng nếu sử dụng.
+
+Plugin Sites đã cài vẫn trỏ về Site cũ. Bản Cloudflare cần kết nối MCP riêng; không tự thay đổi endpoint của plugin Sites.
+
+## 5. Kiểm tra sau cài
+
+Mở /healthz: databaseReady, filesReady, oauthStorageReady và authConfigured cần là true. Kiểm tra chỉ phản ánh cấu hình/schema, không thay thế đăng nhập thật.
+
+Đăng nhập website, thêm một tư liệu nhỏ và tạo một đầu việc. Trong ChatGPT/Codex đã kết nối MCP, yêu cầu studio_get_project và studio_list_tasks. Nhận đúng đầu việc, báo tiến độ, lưu file, nộp kết quả. Giao diện thăm dò mỗi 5 giây khi đang mở để cập nhật chibi. Kết quả luôn chờ bạn duyệt.
+
+AI không tự chạy khi đóng ChatGPT. Cloudflare chỉ lưu, giao việc và đồng bộ; ảnh storyboard dùng công cụ tạo ảnh của phiên ChatGPT/Codex.
+
+## 6. Dữ liệu cũ và giới hạn
+
+Dữ liệu Sites/R2 cũ không tự chuyển sang Cloudflare của bạn. Không sao chép DB hoặc upload giữa tài khoản khi chưa xác nhận. JSON backup không chứa file nhị phân; namespace owner mới là github:&lt;numeric-id&gt;, khác ID Sites, nên không nhập nguyên metadata file cũ như thể file đã có. Cần tải lại file và gắn lại các liên kết hoặc thực hiện migration dữ liệu riêng.
+
+Upload giao diện: 30 MB/tệp. MCP đọc file: 5 MB/lượt. MCP nộp artifact: 1 MB/tệp. Video lớn hơn lưu URL nguồn và ảnh từng shot. Metadata dự án vẫn lưu dạng JSON trong D1; bản tổ chức triển khai này chưa chuyển thư viện sang tìm kiếm FTS/phân trang riêng.
+
+## 7. Chạy và kiểm tra cục bộ
+
+npm ci
+npm run cf:migrate:local
+cp .dev.vars.example .dev.vars
+
+Điền GitHub OAuth App thử nghiệm vào .dev.vars; không commit. Đặt PUBLIC_ORIGIN=https://localhost:8787, allowlist thử nghiệm trong vars hoặc .dev.vars, callback cùng origin + /auth/callback. OAuth cookie yêu cầu HTTPS; lệnh npm run dev bật HTTPS cục bộ. Cần tin chứng chỉ phát triển để thử đăng nhập; app GitHub thử nghiệm nên tách khỏi production.
+
+npm run dev
+npm test
+npm run check
+npm run cf:check
+npm run build:sites  # Chỉ khi cần đóng gói cho Sites cũ
+
+## Tài liệu chính thức
+
+https://developers.cloudflare.com/agents/model-context-protocol/guides/remote-mcp-server/
+https://github.com/cloudflare/workers-oauth-provider
+https://developers.cloudflare.com/workers/ci-cd/builds/git-integration/github-integration/
+https://developers.cloudflare.com/workers/platform/deploy-buttons/
+https://developers.openai.com/plugins/build/auth
+</pre></main></body></html>
