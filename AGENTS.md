@@ -38,6 +38,10 @@ Cloudflare Free uses Workers KV for immutable UUID file keys (20 MiB per file). 
 
 The five roles are specialist responsibilities, not a claim that five background Codex sessions are always running. Sequential execution in one Codex session is supported. Additional subagents depend on the user's instructions and the capabilities and policies of the active Codex environment.
 
+## Repository workflow
+
+The owner requests updates directly on `main`. Unless they explicitly request another workflow, do not create feature branches or pull requests. Fetch the latest `main`, preserve the owner's changes, run the checks appropriate to the change, then commit and push normally to `main`. Never force-push or reset the remote branch to bypass concurrent updates.
+
 ## Source and checks
 
 - Frontend: `public/`; backend: `worker/`; immutable applied migrations: `drizzle/`.
