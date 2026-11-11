@@ -8,11 +8,13 @@ The Site is a control room: it stores the project, hosts the Chibi interface, qu
 
 ## Self-hosted Cloudflare from GitHub
 
-For a Cloudflare request, follow `docs/CLOUDFLARE.vi.md` and use `wrangler.jsonc`, `worker/cloudflare.js`, D1 `DB`, R2 `BUCKET`, KV `OAUTH_KV`, and Workers Static Assets. Do not register or republish a Site for this deployment mode. `npm run build` / `build:cloudflare` prepares Cloudflare assets; `npm run build:sites` retains the original Sites build.
+For a Cloudflare request, follow `docs/CLOUDFLARE.vi.md` and use `wrangler.jsonc`, `worker/cloudflare.js`, D1 `DB`, KV `FILES_KV` for files and KV `OAUTH_KV` for authentication, and Workers Static Assets. Do not register or republish a Site for this deployment mode. `npm run build` / `build:cloudflare` prepares Cloudflare assets; `npm run build:sites` retains the original Sites build.
 
 MCP is a stateless remote Streamable HTTP endpoint at `/mcp` using OAuth 2.1, PKCE S256, and GitHub for user identity. Keep incoming `oai-authenticated-*` headers untrusted on Cloudflare: only inject identity after checking a server-side session or OAuth token. Website and MCP share `github:<numeric-id>`. Every request rechecks the configured GitHub allowlist. Never expose GitHub OAuth secrets in source or chat, and never replace authenticated MCP with a public no-auth endpoint for convenience.
 
 Deployment is ready only after resource provisioning, D1 migrations, PUBLIC_ORIGIN/allowlist, and GitHub OAuth secrets are configured in the owner's account. A local dry-run or mocked OAuth test is not a production deployment or successful real GitHub/ChatGPT account link. State remains JSON in D1; this installation work does not imply indexed library search was implemented. Sites data/uploads do not transfer automatically.
+
+Cloudflare Free uses Workers KV for immutable UUID file keys (20 MiB per file). Keep project state, task claims, progress and approval in D1, not KV. Free limits are per Cloudflare account: 1 GB, 100,000 reads/day, 1,000 writes/day. KV is eventually consistent: reads from another location may lag 60 seconds or more. Read errors must not be replaced with invented content. Sites mode retains its existing R2 binding; do not delete or migrate remote resources implicitly.
 
 ## Installing in another ChatGPT account
 

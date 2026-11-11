@@ -100,7 +100,7 @@ export async function readResource(env,owner,id){
  if(!resource){const tasks=await listTasks(env,owner);resource=tasks.flatMap(t=>t.artifacts).find(a=>a.id===id);}
  if(!resource)throw fail(404,'Không có tài nguyên này trong tài khoản.');
  if(resource.size>5*1024*1024)throw fail(413,'Mỗi lượt đọc MCP tối đa 5 MB. Mở hoặc tải file lớn qua Xưởng.');
- const object=await env.BUCKET.get('users/'+encodeURIComponent(owner)+'/'+id);if(!object)throw fail(404,'Tệp gốc không còn trong kho.');
+ const object=await env.BUCKET.get('users/'+encodeURIComponent(owner)+'/'+id);if(!object)throw fail(env.FILE_STORAGE_DRIVER==='kv'?503:404,env.FILE_STORAGE_DRIVER==='kv'?'Tệp chưa đồng bộ tới vị trí này trong Workers KV. Chờ khoảng 30–60 giây rồi đọc lại; không suy đoán nội dung tệp.':'Tệp gốc không còn trong kho.');
  const mime=resource.mime;const data=new Uint8Array(await object.arrayBuffer());
  if(mime.startsWith('text/')||mime==='application/json')return [{type:'text',text:JSON.stringify({id,name:resource.name,mime,content:new TextDecoder().decode(data),untrusted:true})}];
  let binary='';for(let i=0;i<data.length;i+=8192)binary+=String.fromCharCode(...data.subarray(i,i+8192));const base64=btoa(binary);
