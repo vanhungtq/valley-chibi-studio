@@ -52,6 +52,16 @@ Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → 
 - Gói Codex giữ toàn bộ ảnh/video liên kết với reference được chọn, kể cả ngoài 16 tài nguyên gợi ý ban đầu. Ghi rõ số nguồn đã chọn. Agent đọc ảnh thật và dẫn nguồn, học nguyên tắc để vận dụng vào câu chuyện riêng.
 - Giới hạn hiện tại: 30 MB/tệp tải từ giao diện, 5 MB/lượt đọc MCP, 1 MB/file Codex nộp. Video lớn hơn dùng URL và ảnh shot; URL chưa được tự động tải, xem hoặc chép lời. Ghép 4 shot giảm số lần tạo ảnh nhưng không bảo đảm tỷ lệ tiết kiệm token.
 
+## Giao diện sáng/tối và xưởng 3D
+
+- Nút mặt trăng/mặt trời ở thanh trên cùng đổi nhanh Sáng/Tối. Thiết lập dự án → Giao diện & không gian có Sáng, Tối và Theo hệ thống. Lựa chọn lưu trên trình duyệt, áp dụng trước khi vẽ trang để tránh chớp nền sáng.
+- Xưởng Three.js có bốn nhân viên phụ không gắn nhãn: đi trong lối đi, dừng làm việc, mang tài liệu/khay trà. Năm cộng sự chính giữ nhãn và trạng thái theo đầu việc thật; chuyển động trang trí không đại diện cho tác vụ Codex đang chạy.
+- Kéo chuột xoay 360° và đổi góc cao/thấp, cuộn zoom, chụm hai ngón để zoom trên cảm ứng. Khi canvas có focus, phím mũi tên xoay, cộng/trừ zoom, 0/Home đặt lại góc nhìn. Có nút tự xoay, tạm dừng chuyển động và toàn màn hình nếu trình duyệt cho phép.
+- Camera giữ góc nhìn khi giao diện cập nhật; tường tự mờ khi quay ra phía sau. Ánh sáng xưởng đổi theo theme, đèn trần và màn hình sáng hơn vào chế độ tối. Cây, đèn treo, quạt, mèo và bụi sáng có chuyển động nhẹ.
+- Three.js r169 được đóng gói tại Site. GSAP 3.13.0 tải từ jsDelivr với bản dự phòng cùng phiên bản trong `public/vendor/`; CSP chỉ mở thêm nguồn script CDN này. Không có model API hoặc nội dung dự án gửi đến CDN.
+- Mặc định tôn trọng `prefers-reduced-motion`; có nút bật/tắt chuyển động. Dừng hoạt ảnh khi tab ẩn hoặc xưởng ngoài vùng nhìn; giải phóng timeline và tài nguyên GPU khi rời xưởng.
+- Kiểm thử DOM và toán học camera/lộ trình không thay thế kiểm tra WebGL, cảm ứng và toàn màn hình trên trình duyệt thật.
+
 ## Công cụ MCP
 
 | Công cụ | Mục đích |

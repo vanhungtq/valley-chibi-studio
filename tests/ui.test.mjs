@@ -16,6 +16,7 @@ test('DOM integration: navigation, notes, sample review, revisions, and new epis
  const NativeFormData=saved.FormData;
  class DOMFormData extends NativeFormData{constructor(form){super();if(form)for(const node of form.querySelectorAll('[name]')){if(node.disabled)continue;const name=node.name||node.getAttribute('name');if(node.localName==='select'){const opts=[...node.querySelectorAll('option')];let selected=opts.filter(o=>o.hasAttribute('selected'));if(!selected.length&&!node.hasAttribute('multiple'))selected=opts.slice(0,1);for(const o of selected)this.append(name,o.getAttribute('value')??o.textContent);}else this.set(name,node.value??'');}}}
  Object.assign(globalThis,{window,document:window.document,location:{hash:'#library',origin:'https://studio.test'},FormData:DOMFormData,setInterval:()=>0,setTimeout:(fn,ms)=>{const timer=nativeTimeout(fn,ms);timer.unref();return timer;}});
+ const displayPreferences=new Map();window.localStorage={getItem:key=>displayPreferences.get(key)||null,setItem:(key,value)=>displayPreferences.set(key,value)};
  window.scrollTo=()=>{};
  globalThis.fetch=async(path,options={})=>{const headers=new Headers(options.headers);headers.set('oai-authenticated-user-id','ui-tester');return handleApi(new Request(new URL(path,'https://studio.test'),{...options,headers}),env);};
  const wait=()=>new Promise(resolve=>nativeTimeout(resolve,45));
@@ -24,8 +25,8 @@ test('DOM integration: navigation, notes, sample review, revisions, and new epis
  const stored=()=>JSON.parse(sqlite.prepare('SELECT state FROM studio_state WHERE owner = ?').get('ui-tester').state);
  try{
   await import('../public/app.js?dom-test');await wait();
-  assert.match(document.querySelector('h1').textContent,/Thư viện/);
-  await click('[data-page="knowledge"]');await click('[data-action="add-reference"]');
+  assert.match(document.querySelector('h1').textContent,/Thư viện/);await click('[data-action="toggle-theme"]');assert.equal(document.documentElement.dataset.theme,'dark');assert.equal(displayPreferences.get('valley-theme'),'dark');
+  await click('[data-page="knowledge"]');assert.equal(document.documentElement.dataset.theme,'dark');assert.equal(document.querySelector('[data-action="toggle-theme"]').getAttribute('aria-pressed'),'true');await click('[data-action="add-reference"]');
   document.querySelector('[name="title"]').value='Kỹ thuật quay từ ảnh';document.querySelector('[name="note"]').value='Học ánh sáng bên';
   const picture=new File(['test image'],'angle.jpg',{type:'image/jpeg'});Object.defineProperty(document.querySelector('[name="ref-files"]'),'files',{value:[picture],configurable:true});
   await click('[data-action="add-reference-shot"]');assert.equal(document.querySelector('[name="title"]').value,'Kỹ thuật quay từ ảnh');
