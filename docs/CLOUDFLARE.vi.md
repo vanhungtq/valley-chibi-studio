@@ -135,6 +135,10 @@ npm run check
 npm run cf:check
 npm run build:sites  # Chỉ khi cần đóng gói cho Sites cũ
 
+## 8. Lỗi khi xác nhận OAuth
+
+Nếu màn hình xác nhận MCP báo “Yêu cầu thay đổi dữ liệu phải đến từ chính giao diện Xưởng”, cập nhật bản `main` mới rồi bắt đầu kết nối lại từ ChatGPT/Codex, không gửi lại form cũ. Form OAuth dùng `Referrer-Policy: same-origin` để giữ Origin hợp lệ; CSP chỉ cho redirect qua GitHub và origin callback đã được OAuth provider kiểm tra. Không sửa CSRF để chấp nhận Origin thiếu, `null` hoặc khác nguồn. Kiểm thử Chromium thật nằm ở `npm run test:browser:oauth`; GitHub trong bài kiểm thử được giả lập, không thay thế việc đăng nhập thật của chủ Xưởng.
+
 ## Tài liệu chính thức
 
 https://developers.cloudflare.com/agents/model-context-protocol/guides/remote-mcp-server/

@@ -14,5 +14,22 @@ export async function destroySession(request,env){const token=cookieValue(reques
 export function requireSameOrigin(request,env){if(request.headers.get('origin')!==publicOrigin(env))throw Object.assign(new Error('Yêu cầu thay đổi dữ liệu phải đến từ chính giao diện Xưởng.'),{status:403});}
 export function identityRequest(request,user){const headers=new Headers(request.headers);for(const key of [...headers.keys()])if(key.startsWith('oai-authenticated-'))headers.delete(key);headers.set('oai-authenticated-user-id',user.id);headers.set('oai-authenticated-user-full-name',encodeURIComponent(user.name||user.login));return new Request(request,{headers});}
 export function safeReturnPath(value){return typeof value==='string'&&value.startsWith('/')&&!value.startsWith('//')&&!/[\\\r\n]/.test(value)?value:'/';}
-export function secureResponse(response,{html=false}={}){const headers=new Headers(response.headers);headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','no-referrer');if(html){headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");headers.set('X-Frame-Options','DENY');}return new Response(response.body,{status:response.status,statusText:response.statusText,headers});}
-export function authPage(title,content,status=200,headers={}){const all=new Headers(headers);all.set('Content-Type','text/html; charset=utf-8');all.set('Cache-Control','no-store');return secureResponse(new Response(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · Valley Studio</title><link rel="stylesheet" href="/style.css"></head><body><main style="max-width:660px;margin:8vh auto;padding:30px"><h1>${esc(title)}</h1>${content}</main></body></html>`,{status,headers:all}),{html:true});}
+// Preserve same-origin form Origin; no-referrer makes HTML POST send Origin: null.
+// same-origin still omits the Referer when navigating to another origin.
+export function secureResponse(response,{html=false,formActionOrigins=[]}={}){
+ const headers=new Headers(response.headers);
+ headers.set('X-Content-Type-Options','nosniff');
+ headers.set('Referrer-Policy','same-origin');
+ if(html){
+  // Only the consent page supplies extra origins, from the OAuth request that
+  // the provider has already validated. Other application forms stay on self.
+  const formSources=[...new Set(["'self'",...formActionOrigins.flatMap(value=>{
+   try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?[url.origin]:[];}
+   catch{return [];}
+  })])].join(' ');
+  headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action "+formSources);
+  headers.set('X-Frame-Options','DENY');
+ }
+ return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+}
+export function authPage(title,content,status=200,headers={},responseOptions={}){const all=new Headers(headers);all.set('Content-Type','text/html; charset=utf-8');all.set('Cache-Control','no-store');return secureResponse(new Response(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · Valley Studio</title><link rel="stylesheet" href="/style.css"></head><body><main style="max-width:660px;margin:8vh auto;padding:30px"><h1>${esc(title)}</h1>${content}</main></body></html>`,{status,headers:all}),{...responseOptions,html:true});}
