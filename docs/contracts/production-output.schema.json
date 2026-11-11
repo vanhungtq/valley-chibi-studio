@@ -1,0 +1,137 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "content": {
+      "type": "string"
+    },
+    "missing": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "emotion": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "sound": {
+            "type": "string"
+          },
+          "palette": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "shots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "string"
+                },
+                "lens": {
+                  "type": "string"
+                },
+                "move": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "seconds": {
+                  "type": "integer"
+                },
+                "sound": {
+                  "type": "string"
+                },
+                "light": {
+                  "type": "string"
+                },
+                "assetIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "note": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "size",
+                "lens",
+                "move",
+                "action",
+                "seconds",
+                "sound",
+                "light",
+                "assetIds",
+                "note"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "time",
+          "location",
+          "emotion",
+          "summary",
+          "sound",
+          "palette",
+          "image",
+          "shots"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "title",
+    "summary",
+    "content",
+    "missing",
+    "sources",
+    "scenes"
+  ],
+  "additionalProperties": false
+}
