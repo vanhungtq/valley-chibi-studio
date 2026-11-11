@@ -56,6 +56,28 @@ async function codexClient(name){
  return {jar,client,token,tool};
 }
 
+test('Cloudflare owner enables automatic MCP handoff then switches a running role back to manual',async()=>{
+ const client=await codexClient('codex-automatic'),current=await(await request('/api/state',{},client.jar)).json();
+ const episode={...seedEpisode(),id:crypto.randomUUID(),title:'Tập 30 phút',sample:false,targetMinutes:30};
+ current.state.episodes.push(episode);current.state.activeEpisode=episode.id;
+ const post=(path,value,origin=ORIGIN)=>request(path,{method:'POST',headers:{Origin:origin,'content-type':'application/json'},body:JSON.stringify(value)},client.jar);
+ assert.equal((await request('/api/state',{method:'PUT',headers:{Origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify(current)},client.jar)).status,200);
+ assert.equal((await post('/api/workflow',{episodeId:episode.id,autoApprove:true},'https://foreign.test')).status,403);
+ const enabled=await post('/api/workflow',{episodeId:episode.id,autoApprove:true});assert.equal(enabled.status,200);
+ const first=(await enabled.json()).nextTask,packet=JSON.parse((await client.tool('studio_get_task',{task_id:first.id})).content[0].text);
+ assert.equal(packet.context.episode.targetMinutes,30);assert.equal(packet.workflow.autoApprove,true);
+ const token=JSON.parse((await client.tool('studio_claim_task',{task_id:first.id})).content[0].text).claimToken;
+ const submitted=await client.tool('studio_submit_result',{task_id:first.id,claim_token:token,output:sampleOutput(0)});
+ assert.equal(submitted.isError,undefined);const result=JSON.parse(submitted.content[0].text);
+ assert.equal(result.task.status,'approved');assert.equal(result.nextTask.stage,1);assert.equal(result.awaitingHumanReview,false);
+ const next=result.nextTask,nextToken=JSON.parse((await client.tool('studio_claim_task',{task_id:next.id})).content[0].text).claimToken;
+ assert.equal((await post('/api/workflow',{episodeId:episode.id,autoApprove:false})).status,200);
+ const manual=await client.tool('studio_submit_result',{task_id:next.id,claim_token:nextToken,output:sampleOutput(1)});
+ assert.equal(manual.isError,undefined);assert.equal(JSON.parse(manual.content[0].text).awaitingHumanReview,true);
+ const final=(await(await request('/api/state',{},client.jar)).json()).state.episodes.find(e=>e.id===episode.id);
+ assert.equal(final.stage,1);assert.deepEqual(final.approved,[0]);assert.equal(final.outputs[0].approval.mode,'automatic');assert.equal(final.autoApprove,false);
+});
+
 test('two independently authorized Codex clients continue the same Cloudflare project and task',async()=>{
  const first=await codexClient('codex-first'),second=await codexClient('codex-second');
  assert.notEqual(first.client.client_id,second.client.client_id);assert.notEqual(first.token.access_token,second.token.access_token);

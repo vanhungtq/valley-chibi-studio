@@ -59,11 +59,11 @@ Bạn viết brief + tải tư liệu trong Xưởng
   → Codex đọc gói và nhận việc (running)
   → Codex báo tiến độ, đọc file và tạo tài liệu
   → MCP đồng bộ file + kết quả (awaiting_review)
-  → Bạn duyệt trong Xưởng (approved)
+  → Duyệt thủ công hoặc tự động theo lựa chọn trong Xưởng (approved)
   → Giao bước tiếp theo
 ```
 
-Bấm giao việc không tự khởi chạy một phiên Codex ẩn. Trong phiên Codex có plugin Xưởng, yêu cầu nhận đầu việc vừa giao hoặc dán yêu cầu được sao chép từ giao diện. Codex dùng năng lực và công cụ của chính phiên đó. Sau khi nộp, dừng chờ bạn duyệt; MCP không có công cụ tự phê duyệt.
+Bấm giao việc không tự khởi chạy một phiên Codex ẩn. Trong phiên Codex có plugin Xưởng, yêu cầu nhận đầu việc vừa giao hoặc dán yêu cầu được sao chép từ giao diện. Codex dùng năng lực và công cụ của chính phiên đó. Mặc định sau khi nộp, Codex dừng chờ bạn duyệt. Khi bạn bật **Tự động duyệt & chuyển bước**, máy chủ duyệt kết quả hợp lệ, giao `nextTask` và Codex tiếp tục các vai trò trong phiên đang mở. MCP không có công cụ tự bật chế độ hoặc bỏ qua lựa chọn của bạn.
 
 Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → Designer. Đây là các trách nhiệm chuyên môn; có thể thực hiện tuần tự trong một phiên Codex. Không có tuyên bố năm phiên nền luôn chạy đồng thời.
 
@@ -74,16 +74,24 @@ Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → 
 - Project bible, URL nguồn, timecode, mô tả, tags, ghi chú và phiên bản.
 - Đầu việc lưu snapshot + hash; từ chối kết quả khi đầu vào đã đổi.
 - Claim theo lease 15 phút, gia hạn bằng báo tiến độ, hiển thị khi phiên cần tiếp tục.
-- Kết quả có schema, ID nguồn hợp lệ, lưu file Codex và dừng chờ người duyệt.
+- Kết quả có schema, ID nguồn hợp lệ, lưu file Codex và áp dụng chế độ duyệt theo tập.
 - Hồ sơ HTML có hình nhúng, in PDF qua trình duyệt, shot list CSV và JSON sao lưu.
 - Tập mẫu có 6 cảnh, 24 shot, 480 giây mục tiêu dựng. Nội dung mẫu được gắn nhãn riêng.
 - Đăng nhập Sites, D1 cho bản ghi, KV theo tài khoản ở bản Cloudflare Free (R2 ở bản Sites); JSON sao lưu không chứa file nhị phân.
+
+## Thời lượng tập phim và tự động duyệt
+
+Trong **Brief tập phim**, nhập **Thời lượng video mục tiêu · phút**, ví dụ `30`. Mỗi tập lưu riêng `targetMinutes` (số nguyên 1–240); tập mới mặc định 30 phút, tập mẫu và dữ liệu cũ giữ mục tiêu 8 phút. Giao diện và production book hiển thị riêng mục tiêu và tổng thời lượng shot đã phân bổ. Sửa thời lượng khi đã có kết quả lưu bản cũ vào lịch sử và mở lại quy trình từ định hướng.
+
+Công tắc **Tự động duyệt & chuyển bước** nằm ngay dưới thanh thông tin tập. Mặc định tắt. Khi bật, Xưởng duyệt cả kết quả đang chờ, lưu dấu vết tự động, tạo đầu việc kế tiếp và trả hướng dẫn để Codex làm tiếp cho đến đủ năm vai trò. Biên kịch/quay phim phải phân bổ tổng `shot.seconds` trong ±5% thời lượng mục tiêu. Tắt công tắc được cả khi Codex đang làm: claim/file giữ nguyên, kết quả nộp sau đó sẽ chờ bạn duyệt. Các mốc đã duyệt trước khi tắt vẫn giữ trong lịch sử.
+
+Tự động chuyển bước cần một phiên Codex/ChatGPT đang làm việc và kết nối MCP. Website không chạy một phiên Codex ẩn khi bạn đóng chat. Nếu bàn giao gặp lỗi sau khi đã lưu kết quả, Codex có thể nộp lại đúng kết quả để tạo bước tiếp mà không duyệt trùng.
 
 ## Storyboard ChatGPT & thư viện tri thức có hình
 
 - Storyboard → **Tạo ảnh bằng ChatGPT**: chia shot list thành nhóm 4, sao chép prompt cho một ảnh 2×2 không viền. Designer nhận cùng hướng dẫn qua MCP. Không gọi API mô hình bên ngoài.
 - **Nhập ảnh 4 shot**: chọn nhóm hoặc gán riêng từng ô, tải ảnh lên, cắt bằng Canvas của trình duyệt và lưu từng JPEG vào kho tệp (KV trên Cloudflare, R2 ở Sites). Ảnh AI có nhãn riêng, được đưa vào production book và tải theo từng shot.
-- Designer có thể dùng `studio_save_artifact` với trường tùy chọn `storyboard_shot_ids` (1–4 ID theo thứ tự trên trái, trên phải, dưới trái, dưới phải). Tối đa 1 MB/ảnh. Sau `studio_submit_result`, Xưởng liên kết các ô vào shot và dừng chờ duyệt. Bản gốc được lưu một lần; giao diện/HTML cắt theo ô, tải từng ảnh sẽ cắt JPEG thực tế.
+- Designer có thể dùng `studio_save_artifact` với trường tùy chọn `storyboard_shot_ids` (1–4 ID theo thứ tự trên trái, trên phải, dưới trái, dưới phải). Tối đa 1 MB/ảnh. Sau `studio_submit_result`, Xưởng liên kết các ô vào shot và áp dụng chế độ duyệt của tập. Bản gốc được lưu một lần; giao diện/HTML cắt theo ô, tải từng ảnh sẽ cắt JPEG thực tế.
 - Tri thức → **Thêm kiến thức**: ảnh minh họa kỹ thuật có thể tải trực tiếp, không cần URL. Video mẫu có file MP4/MOV hoặc URL nguồn, kênh/tác giả, ảnh minh họa và tối đa 200 shot theo thứ tự.
 - Mỗi shot reference có timecode, ảnh góc quay, cỡ cảnh, tiêu cự nếu biết, chuyển động và chú thích. Có thể lấy khung hình từ video đã lưu tại vị trí đang dừng, thêm/xóa/đổi thứ tự shot và tìm theo nội dung phân tích.
 - Gói Codex giữ toàn bộ ảnh/video liên kết với reference được chọn, kể cả ngoài 16 tài nguyên gợi ý ban đầu. Ghi rõ số nguồn đã chọn. Agent đọc ảnh thật và dẫn nguồn, học nguyên tắc để vận dụng vào câu chuyện riêng.

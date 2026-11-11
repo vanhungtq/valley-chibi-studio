@@ -17,7 +17,7 @@ Yêu cầu bắt buộc:
 - Xưởng chỉ là giao diện 3D, thư viện, hàng đợi và nơi nhận kết quả.
 - Kết nối native MCP qua plugin riêng của Site do Sites tạo khi xuất bản.
 - Không tự khởi chạy Codex ẩn hoặc giả lập trạng thái đang làm.
-- Chủ dự án duyệt từng bước; Codex không tự duyệt.
+- Mặc định chủ dự án duyệt từng bước. Chỉ khi chủ dự án bật Tự động duyệt & chuyển bước, máy chủ tự duyệt và Codex làm tiếp nextTask; Codex không tự đổi chế độ.
 
 Hãy clone repo bằng quyền GitHub của tôi, kiểm tra Node 24, chạy npm ci,
 npm test, npm run check và npm run build. Dùng skill Sites của phiên này

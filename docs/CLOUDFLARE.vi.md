@@ -105,7 +105,7 @@ Plugin Sites đã cài vẫn trỏ về Site cũ. Bản Cloudflare cần kết n
 
 ### Dùng nhiều tài khoản Codex với cùng Xưởng
 
-Đổi tài khoản Codex chỉ cần kết nối lại cùng URL MCP và cấp quyền bằng cùng GitHub chủ Xưởng. Dữ liệu giữ ở Cloudflare; không cần tạo Worker/D1/KV hoặc GitHub OAuth App khác. Chọn **Kết nối Codex** để sao chép URL và yêu cầu tiếp tục có ID đầu việc. Với việc đang chạy, chủ dự án có thể bấm **Bàn giao sang Codex khác**: phiên cũ mất claim, tiến độ/file giữ lại, phiên mới nhận token mới ngay. Kết quả vẫn chờ bạn duyệt.
+Đổi tài khoản Codex chỉ cần kết nối lại cùng URL MCP và cấp quyền bằng cùng GitHub chủ Xưởng. Dữ liệu giữ ở Cloudflare; không cần tạo Worker/D1/KV hoặc GitHub OAuth App khác. Chọn **Kết nối Codex** để sao chép URL và yêu cầu tiếp tục có ID đầu việc. Với việc đang chạy, chủ dự án có thể bấm **Bàn giao sang Codex khác**: phiên cũ mất claim, tiến độ/file giữ lại, phiên mới nhận token mới ngay. Kết quả tuân theo chế độ thủ công hoặc tự động bạn chọn trong Xưởng.
 
 [Hướng dẫn chuyển tài khoản](RESUME_CODEX.vi.md) và [prompt tiếp tục](CODEX_RESUME_PROMPT.vi.md) phân biệt kết nối lại, sửa mã GitHub và tạo Xưởng mới. Chat/file chưa đồng bộ không tự chuyển tài khoản. Mỗi tài khoản/workspace cần hỗ trợ custom MCP; không sao chép thông tin đăng nhập giữa các tài khoản.
 
@@ -113,7 +113,7 @@ Plugin Sites đã cài vẫn trỏ về Site cũ. Bản Cloudflare cần kết n
 
 Mở /healthz: databaseReady, filesReady, oauthStorageReady và authConfigured cần là true. Kiểm tra chỉ phản ánh cấu hình/schema, không thay thế đăng nhập thật.
 
-Đăng nhập website, thêm một tư liệu nhỏ và tạo một đầu việc. Trong ChatGPT/Codex đã kết nối MCP, yêu cầu studio_get_project và studio_list_tasks. Nhận đúng đầu việc, báo tiến độ, lưu file, nộp kết quả. Giao diện thăm dò mỗi 5 giây khi đang mở để cập nhật chibi. Kết quả luôn chờ bạn duyệt.
+Đăng nhập website, thêm một tư liệu nhỏ và tạo một đầu việc. Trong ChatGPT/Codex đã kết nối MCP, yêu cầu studio_get_project và studio_list_tasks. Nhận đúng đầu việc, báo tiến độ, lưu file, nộp kết quả. Giao diện thăm dò mỗi 5 giây khi đang mở để cập nhật chibi. Mặc định kết quả chờ bạn duyệt; bật Tự động duyệt & chuyển bước để máy chủ duyệt và Codex tiếp tục đầu việc kế tiếp.
 
 AI không tự chạy khi đóng ChatGPT. Cloudflare chỉ lưu, giao việc và đồng bộ; ảnh storyboard dùng công cụ tạo ảnh của phiên ChatGPT/Codex.
 

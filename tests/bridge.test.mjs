@@ -22,6 +22,116 @@ async function initialized(){const x=setup();x.db.exec(migrations);const s=seedS
 async function queued(x){const q=await x.api('/api/tasks','POST',{episodeId:'ep-01'});assert.equal(q.status,201,JSON.stringify(q.body));return q.body.task;}
 async function claimed(x,id){const r=await x.tool('studio_claim_task',{task_id:id});assert.equal(r.error,false,JSON.stringify(r.data));return r.data.claimToken;}
 
+test('a 30-minute episode automatically completes all five roles with durable approvals and files',async()=>{
+ const x=await initialized(),current=(await x.api('/api/state')).body;
+ current.state.episodes[0].targetMinutes=30;
+ assert.equal((await x.api('/api/state','PUT',current)).status,200);
+ const enabled=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true});
+ assert.equal(enabled.status,200);assert.equal(enabled.body.workflow.autoApprove,true);
+ let task=enabled.body.nextTask;
+ const outbound=globalThis.fetch;globalThis.fetch=()=>{throw new Error('External API forbidden');};
+ try{for(let stage=0;stage<5;stage++){
+  assert.equal(task.stage,stage);assert.equal(task.status,'queued');
+  const packet=(await x.tool('studio_get_task',{task_id:task.id})).data;
+  assert.equal(packet.context.episode.targetMinutes,30);assert.equal(packet.context.episode.targetSeconds,1800);assert.equal(packet.workflow.autoApprove,true);
+  assert.match(packet.instructions,/nextTask/);
+  const token=await claimed(x,task.id),output=sampleOutput(stage);
+  if([2,3].includes(stage))for(const scene of output.scenes){scene.image='';for(const shot of scene.shots)shot.seconds*=1800/480;}
+  if(stage===4)assert.equal((await x.tool('studio_save_artifact',{task_id:task.id,claim_token:token,filename:'production-book.html',mime:'text/html',encoding:'utf8',content:'<!doctype html><title>30 phút</title><h1>Production book</h1>'})).error,false);
+  const submitted=await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output});
+  assert.equal(submitted.error,false,JSON.stringify(submitted.data));assert.equal(submitted.data.task.status,'approved');assert.equal(submitted.data.awaitingHumanReview,false);
+  const repeated=await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output});
+  assert.equal(repeated.data.alreadySubmitted,true);assert.equal(repeated.data.nextTask?.id,submitted.data.nextTask?.id);
+  task=submitted.data.nextTask;
+  if(stage===4){assert.equal(task,null);assert.equal(submitted.data.workflow.completed,true);}
+ }}finally{globalThis.fetch=outbound;}
+ const state=(await x.api('/api/state')).body.state,e=state.episodes[0];
+ assert.equal(e.stage,5);assert.deepEqual(e.approved,[0,1,2,3,4]);assert.equal(e.versions.length,5);assert.equal(e.activity.filter(a=>a.kind==='auto_approval').length,5);
+ assert.equal(e.outputs[4].artifacts.length,1);assert.equal(e.scenes.flatMap(s=>s.shots).reduce((sum,shot)=>sum+shot.seconds,0),1800);
+ assert.ok(Object.values(e.outputs).every(o=>o.approval.mode==='automatic'));assert.equal((await x.api('/api/tasks')).body.tasks.length,5);
+});
+
+test('enabling automation approves a waiting result once and queues the next role',async()=>{
+ const x=await initialized(),task=await queued(x),token=await claimed(x,task.id);
+ assert.equal((await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)})).data.awaitingHumanReview,true);
+ const on=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true});
+ assert.equal(on.status,200);assert.equal(on.body.state.episodes[0].stage,1);assert.equal(on.body.nextTask.stage,1);
+ assert.equal(on.body.tasks.find(t=>t.id===task.id).status,'approved');
+ const again=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true});
+ assert.equal(again.body.nextTask.id,on.body.nextTask.id);assert.equal(again.body.state.episodes[0].versions.length,1);
+});
+
+test('turning automation off during a live claim preserves the claim and stops at manual review',async()=>{
+ const x=await initialized(),on=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true}),task=on.body.nextTask,token=await claimed(x,task.id);
+ const off=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:false});
+ assert.equal(off.status,200);assert.equal(off.body.nextTask,null);assert.equal(off.body.tasks[0].status,'running');
+ assert.equal((await x.tool('studio_report_progress',{task_id:task.id,claim_token:token,message:'Tiếp tục với chế độ duyệt tay.'})).error,false);
+ assert.equal((await x.tool('studio_get_task',{task_id:task.id})).data.workflow.autoApprove,false);
+ const submitted=await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)});
+ assert.equal(submitted.error,false);assert.equal(submitted.data.awaitingHumanReview,true);assert.equal(submitted.data.nextTask,null);
+ const e=(await x.api('/api/state')).body.state.episodes[0];assert.equal(e.stage,0);assert.deepEqual(e.approved,[]);
+});
+
+test('turning automation off just before submission commits prevents any automatic approval',async()=>{
+ const x=await initialized(),on=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true}),task=on.body.nextTask,token=await claimed(x,task.id),batch=x.env.DB.batch;
+ x.env.DB.batch=async statements=>{x.env.DB.batch=batch;assert.equal((await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:false})).status,200);return batch(statements);};
+ const args={task_id:task.id,claim_token:token,output:sampleOutput(0)};
+ assert.equal((await x.tool('studio_submit_result',args)).error,true);
+ let e=(await x.api('/api/state')).body.state.episodes[0];assert.equal(e.outputs[0],undefined);assert.equal(e.autoApprove,false);
+ const retry=await x.tool('studio_submit_result',args);assert.equal(retry.error,false);assert.equal(retry.data.awaitingHumanReview,true);
+ e=(await x.api('/api/state')).body.state.episodes[0];assert.equal(e.stage,0);assert.equal(e.activity.filter(a=>a.kind==='auto_approval').length,0);
+});
+
+test('a duration change invalidates a claimed packet and an underlength script is rejected',async()=>{
+ const x=await initialized(),task=await queued(x),token=await claimed(x,task.id),current=(await x.api('/api/state')).body;
+ current.state.episodes[0].targetMinutes=30;assert.equal((await x.api('/api/state','PUT',current)).status,200);
+ assert.equal((await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)})).error,true);
+ assert.equal((await x.api('/api/tasks')).body.tasks.find(t=>t.id===task.id).status,'stale');
+ const edited=(await x.api('/api/state')).body;edited.state.episodes[0].stage=2;edited.state.episodes[0].approved=[0,1];assert.equal((await x.api('/api/state','PUT',edited)).status,200);
+ const writing=await queued(x),writingToken=await claimed(x,writing.id);
+ const rejected=await x.tool('studio_submit_result',{task_id:writing.id,claim_token:writingToken,output:sampleOutput(2)});
+ assert.equal(rejected.error,true);assert.match(rejected.data,/30 phút/);assert.match(rejected.data,/5%/);
+ assert.equal((await x.api('/api/state')).body.state.episodes[0].outputs[2],undefined);
+ assert.equal((await x.api('/api/tasks')).body.tasks.find(t=>t.id===writing.id).status,'running');
+});
+
+test('workflow controls are owner scoped, validate types, and default to manual for legacy episodes',async()=>{
+ const x=await initialized(),current=(await x.api('/api/state')).body;
+ delete current.state.episodes[0].targetMinutes;delete current.state.episodes[0].autoApprove;
+ assert.equal((await x.api('/api/state','PUT',current)).status,200);
+ for(const value of [0,'true',null])assert.equal((await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:value})).status,400);
+ assert.equal((await x.api('/api/workflow','POST',{episodeId:'missing',autoApprove:true})).status,404);
+ const bob=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true},'bob');assert.equal(bob.status,200);
+ assert.notEqual((await x.api('/api/state','GET',undefined,'bob')).body.revision,0);
+ const task=await queued(x),token=await claimed(x,task.id),packet=(await x.tool('studio_get_task',{task_id:task.id})).data;
+ assert.equal(packet.context.episode.targetMinutes,8);assert.equal(packet.workflow.autoApprove,false);
+ assert.equal((await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)})).data.awaitingHumanReview,true);
+ assert.equal((await x.api('/api/state')).body.state.episodes[0].autoApprove,undefined);
+});
+
+test('identical resubmission repairs a failed automatic handoff without duplicating approvals',async()=>{
+ const x=await initialized(),on=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true}),task=on.body.nextTask,token=await claimed(x,task.id);
+ const prepare=x.env.DB.prepare.bind(x.env.DB);
+ x.env.DB.prepare=sql=>{if(sql.startsWith('INSERT OR IGNORE INTO codex_tasks'))throw new Error('Temporary queue outage');return prepare(sql);};
+ const args={task_id:task.id,claim_token:token,output:sampleOutput(0)},submitted=await x.tool('studio_submit_result',args);
+ assert.equal(submitted.error,false);assert.equal(submitted.data.task.status,'approved');assert.match(submitted.data.queueError,/đã lưu/);assert.equal(submitted.data.nextTask,null);
+ x.env.DB.prepare=prepare;
+ const retry=await x.tool('studio_submit_result',args);assert.equal(retry.error,false);assert.equal(retry.data.alreadySubmitted,true);assert.equal(retry.data.nextTask.stage,1);
+ assert.equal((await x.api('/api/state')).body.state.episodes[0].versions.length,1);assert.equal((await x.api('/api/tasks')).body.tasks.length,2);
+});
+
+test('automatic queuing cannot insert a next task after the owner turns it off',async()=>{
+ const x=await initialized(),on=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true}),task=on.body.nextTask,token=await claimed(x,task.id),prepare=x.env.DB.prepare.bind(x.env.DB);
+ x.env.DB.prepare=sql=>{
+  const statement=prepare(sql);if(!sql.startsWith('INSERT OR IGNORE INTO codex_tasks'))return statement;
+  return {bind(...args){const bound=statement.bind(...args);return {...bound,async run(){x.env.DB.prepare=prepare;assert.equal((await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:false})).status,200);return bound.run();}};}};
+ };
+ const submitted=await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)});
+ assert.equal(submitted.error,false);assert.equal(submitted.data.workflow.autoApprove,false);assert.equal(submitted.data.nextTask,null);
+ assert.equal((await x.api('/api/tasks')).body.tasks.length,1);
+ const e=(await x.api('/api/state')).body.state.episodes[0];assert.equal(e.stage,1);assert.deepEqual(e.approved,[0]);assert.equal(e.autoApprove,false);
+});
+
 test('MCP advertises discovery, nine tools, and no automatic approval tool',async()=>{const x=await initialized();const discover=await x.rpc('server/discover');assert.ok(discover.result.supportedVersions.includes('2026-07-28'));const tools=(await x.rpc('tools/list')).result.tools;assert.equal(tools.length,9);assert.ok(!tools.some(t=>/approve/.test(t.name)));assert.equal((await x.tool('studio_get_project',{},null)).error,true);});
 test('queue only records work; does not start execution or make outbound model calls',async()=>{const x=await initialized();const fetch=globalThis.fetch;globalThis.fetch=()=>{throw new Error('Outbound requests forbidden');};try{const t=await queued(x);assert.equal(t.status,'queued');assert.equal(t.leaseUntil,null);const packet=await x.tool('studio_get_task',{task_id:t.id});assert.equal(packet.error,false);assert.match(packet.data.instructions,/Không gọi API mô hình/);assert.equal(packet.data.context.episode.id,'ep-01');assert.ok(packet.data.outputSchema);const cfg=(await x.api('/api/config')).body;assert.equal(cfg.externalModelCalls,false);assert.equal(cfg.executionMode,'codex');}finally{globalThis.fetch=fetch;}});
 test('queue is idempotent and tasks from another account cannot be read or claimed',async()=>{const x=await initialized();const a=await queued(x),b=await queued(x);assert.equal(a.id,b.id);assert.equal(x.db.prepare('SELECT count(*) AS n FROM codex_tasks').get().n,1);assert.equal((await x.tool('studio_get_task',{task_id:a.id},'bob')).error,true);assert.equal((await x.tool('studio_claim_task',{task_id:a.id},'bob')).error,true);assert.deepEqual((await x.api('/api/tasks','GET',undefined,'bob')).body.tasks,[]);});

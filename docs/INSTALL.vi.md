@@ -87,7 +87,7 @@ Codex sẽ đọc gói đầu việc, nhận phiên, báo tiến độ, đọc t
 
 ## 6. Duyệt và sửa
 
-Luồng chính:
+Luồng mặc định khi tắt tự động:
 
 1. Điều hành → brief và phạm vi → bạn duyệt.
 2. Sáng tạo → concept, hook, palette, cảm xúc → bạn duyệt.
@@ -95,7 +95,7 @@ Luồng chính:
 4. Quay phim → shot list, ánh sáng, âm thanh, continuity → bạn duyệt.
 5. Designer → tài liệu và production book → bạn duyệt.
 
-Sau mỗi bước, Codex dừng chờ bạn. Muốn đi tiếp, duyệt trong Xưởng rồi giao bước tiếp theo. Muốn sửa, chọn “Yêu cầu chỉnh sửa”, ghi cụ thể; bản cũ được lưu, bước cần sửa và các bước phụ thuộc được mở lại.
+Ở chế độ thủ công, sau mỗi bước Codex dừng chờ bạn. Muốn đi tiếp, duyệt trong Xưởng rồi giao bước tiếp theo. Muốn sửa, chọn “Yêu cầu chỉnh sửa”, ghi cụ thể; bản cũ được lưu, bước cần sửa và các bước phụ thuộc được mở lại.
 
 Thay đổi đầu vào trong lúc Codex đang làm khiến kết quả cũ bị từ chối, bảo vệ brief mới. Nếu phiên Codex dừng quá mười lăm phút không báo tiến độ, Xưởng hiện phiên cần tiếp tục; Codex có thể nhận lại sau khi lease hết hạn. Có thể hủy đầu việc trong Xưởng nếu muốn đổi hướng ngay.
 
@@ -114,7 +114,7 @@ Thay đổi đầu vào trong lúc Codex đang làm khiến kết quả cũ bị
 - Giao việc chỉ tạo trạng thái chờ nhận.
 - Nhận qua plugin làm đúng nhân vật chuyển trạng thái.
 - Tiến độ công khai và file xuất xuất hiện trên Xưởng.
-- Nộp kết quả không tự duyệt hoặc tự mở bước sau.
+- Khi tắt tự động, nộp kết quả chờ bạn duyệt. Khi bật, máy chủ duyệt và tạo bước kế tiếp; thử tắt ngay khi Codex đang làm để kiểm tra kết quả kế tiếp dừng chờ duyệt.
 - Chỉnh brief rồi thử nộp kết quả cũ: bị từ chối.
 - Không có khóa API mô hình và không có request gọi dịch vụ mô hình trong worker.
 
@@ -126,7 +126,7 @@ Các bài kiểm tra chạy bằng `npm test` kiểm tra luồng API, MCP và DO
 Hãy dùng plugin Xưởng Chibi của tôi. Liệt kê các đầu việc, nhận đầu việc
 tôi vừa giao và làm đúng vai trò cùng schema trong gói. Mọi tác vụ thực hiện
 trong Codex; không gọi API mô hình bên ngoài. Đọc tư liệu thật, báo tiến độ,
-đồng bộ file và nộp kết quả. Sau đó dừng để tôi duyệt trong Xưởng.
+đồng bộ file và nộp kết quả. Nếu awaitingHumanReview=true, dừng chờ duyệt. Nếu workflow.autoApprove=true và có nextTask, đọc studio_get_task, nhận bằng studio_claim_task và tiếp tục vai trò kế tiếp trong phiên hiện tại đến khi hoàn tất hoặc bị chặn. Chỉ chủ dự án bật/tắt chế độ trong Xưởng; không tự sửa state để duyệt.
 ```
 
 Nếu công cụ plugin chưa xuất hiện, cài/kết nối đúng plugin của Site rồi mở phiên mới. Không thay việc đồng bộ bằng các câu nói “đã cập nhật” khi chưa có kết quả thành công từ công cụ.

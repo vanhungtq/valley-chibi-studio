@@ -1,5 +1,6 @@
 import { AGENTS, STAGES, seedState, SCENES } from '../public/data.js';
-import {handleTasks, reconcileReviews} from './bridge.js';
+import {handleTasks,reconcileReviews,setWorkflow,continueWorkflow} from './bridge.js';
+import {targetMinutes,approveEpisode} from '../public/workflow.js';
 
 export const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 export const fail=(status,message)=>Object.assign(new Error(message),{status});
@@ -36,6 +37,8 @@ function validState(v,owner){
  const ids=new Set();
  for(const e of v.episodes){
   if(!isObj(e)||typeof e.id!=='string'||ids.has(e.id)||typeof e.title!=='string'||!e.title.trim()||typeof e.brief!=='string'||!Number.isInteger(e.stage)||e.stage<0||e.stage>5||!Array.isArray(e.approved)||!Array.isArray(e.scenes)||!Array.isArray(e.activity)||!Array.isArray(e.versions)||!Array.isArray(e.notes)||!isObj(e.outputs))throw fail(400,'Tập phim không hợp lệ.');
+  if(e.targetMinutes!==undefined&&(!Number.isInteger(e.targetMinutes)||e.targetMinutes<1||e.targetMinutes>240))throw fail(400,'Thời lượng mục tiêu phải là số phút nguyên từ 1 đến 240.');
+  if(e.autoApprove!==undefined&&typeof e.autoApprove!=='boolean')throw fail(400,'Chế độ tự động duyệt phải là bật hoặc tắt.');
   ids.add(e.id);validateScenes(e.scenes);
  }
  if(v.episodes.length&&!ids.has(v.activeEpisode))throw fail(400,'Tập hiện tại không tồn tại.');
@@ -80,7 +83,7 @@ const SAMPLE_CONTENT=[
  {title:'Production book · bản mẫu',summary:'Hồ sơ quay có kịch bản, storyboard, shot list và checklist.',content:'Bộ hồ sơ được dựng từ dữ liệu của các bước đã duyệt, giữ nguyên ID cảnh và shot.\n\nBao gồm: bìa song ngữ, brief, ghi chú khảo sát, kịch bản theo cảnh, bảng shot, storyboard minh họa, lịch theo khung sáng, checklist thiết bị và đạo cụ.\n\nẢnh minh họa là mood reference, không phải ảnh hiện trường. Hãy liên kết tài nguyên thực tế vào từng shot để thay hình trong hồ sơ.\n\nXuất bản HTML để ekip mở trên điện thoại hoặc in thành PDF, CSV cho trợ lý quay và JSON để lưu toàn bộ dữ liệu.',missing:['Thay mood reference bằng ảnh hiện trường','Chốt call sheet với ngày, người phụ trách và địa điểm liên hệ']}
 ];
 export function sampleOutput(stage){return {...structuredClone(SAMPLE_CONTENT[stage]),sources:[],scenes:stage===2||stage===3?structuredClone(SCENES):[]};}
-function fingerprint(state,e){return JSON.stringify({brief:e.brief,stage:e.stage,outputs:e.outputs,scenes:e.scenes,bible:state.project.bible,assets:state.assets,references:state.references});}
+function fingerprint(state,e){return JSON.stringify({brief:e.brief,targetMinutes:targetMinutes(e),stage:e.stage,outputs:e.outputs,scenes:e.scenes,bible:state.project.bible,assets:state.assets,references:state.references});}
 export function chooseResources(state,e){
  const words=new Set((e.brief+' '+e.title).toLowerCase().split(/\s+/).filter(x=>x.length>2));
  const score=x=>Array.from(words).filter(w=>JSON.stringify(x).toLowerCase().includes(w)).length;
@@ -102,6 +105,7 @@ export async function handleApi(request,env){
  if(!owner)throw fail(401,'Vui lòng đăng nhập để mở dự án.');
  if(!env.DB||!env.BUCKET)throw fail(503,'Kho lưu trữ của studio chưa sẵn sàng.');
  if(path.startsWith('/api/tasks'))return await handleTasks(request,env,owner);
+ if(path==='/api/workflow'&&request.method==='POST'){const b=await body(request);return json(await setWorkflow(env,owner,b.episodeId,b.autoApprove));}
  if(path==='/api/state'){
   if(request.method==='GET')return json(await readState(env,owner));
   if(request.method==='PUT'){
@@ -157,8 +161,9 @@ export async function handleApi(request,env){
    ep.outputs[stage]={...output,agent:AGENTS[stage].id,at,mode:b.mode,version:ep.versions.length+1};
    if((stage===2||stage===3)&&output.scenes.length){ep.scenes=output.scenes;ep.stale=false;}
    ep.activity.push({id:crypto.randomUUID(),agent:AGENTS[stage].id,text:output.summary,at,kind:b.mode});
+   if(ep.autoApprove===true)approveEpisode(ep,{automatic:true,at});
    const revision=await saveState(env,owner,current.state,current.revision);
-   return json({state:current.state,revision,output:ep.outputs[stage]});
+   return json({state:current.state,revision,output:ep.outputs[stage],...await continueWorkflow(env,owner,ep.id)});
   }finally{await env.DB.prepare('DELETE FROM run_locks WHERE owner = ? AND episode_id = ? AND token = ?').bind(owner,e.id,token).run();}
  }
  throw fail(404,'Không tìm thấy chức năng này.');

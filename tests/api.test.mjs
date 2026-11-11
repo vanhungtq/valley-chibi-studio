@@ -23,6 +23,15 @@ function fixture(){
 async function save(call,state,revision){const r=await call('/api/state','PUT',{state,revision});assert.equal(r.status,200,JSON.stringify(r.body));return r.body.revision;}
 
 test('sample contains six scenes, unique shot IDs, and exactly eight minutes',()=>{const shots=SCENES.flatMap(s=>s.shots);assert.equal(SCENES.length,6);assert.equal(shots.length,24);assert.equal(new Set(shots.map(s=>s.id)).size,24);assert.equal(shots.reduce((n,s)=>n+s.seconds,0),480);});
+test('per-episode duration and automation fields validate without replacing stored data',async()=>{
+ const {call}=fixture(),state=seedState();state.episodes[0].targetMinutes=30;await save(call,state,0);
+ for(const value of [0,-1,241,1.5,'30',null]){
+  const current=(await call('/api/state')).body;current.state.episodes[0].targetMinutes=value;
+  assert.equal((await call('/api/state','PUT',current)).status,400);
+ }
+ const current=(await call('/api/state')).body;current.state.episodes[0].autoApprove='yes';assert.equal((await call('/api/state','PUT',current)).status,400);
+ assert.equal((await call('/api/state')).body.state.episodes[0].targetMinutes,30);
+});
 test('private API rejects missing identity and does not expose state',async()=>{const {call}=fixture();assert.equal((await call('/api/state','GET',undefined,null)).status,401);const cfg=await call('/api/config','GET',undefined,null);assert.equal(cfg.body.signedIn,false);assert.equal(cfg.body.executionMode,'codex');assert.equal(cfg.body.externalModelCalls,false);});
 test('state is isolated by user, persists across reads, and detects competing writes',async()=>{const {call}=fixture();const s=seedState();s.project.name='Alice project';const rev=await save(call,s,0);assert.equal(rev,1);assert.equal((await call('/api/state')).body.state.project.name,'Alice project');assert.notEqual((await call('/api/state','GET',undefined,'bob')).body.state.project.name,'Alice project');assert.equal((await call('/api/state','PUT',{state:s,revision:0})).status,409);await save(call,s,rev);assert.equal((await call('/api/state','PUT',{state:s,revision:rev})).status,409);});
 test('legacy model route is rejected and cannot silently fall back to sample',async()=>{const {call}=fixture();await save(call,seedState(),0);const r=await call('/api/run','POST',{episodeId:'ep-01',mode:'ai'});assert.equal(r.status,400);assert.equal(Object.keys((await call('/api/state')).body.state.episodes[0].outputs).length,0);});

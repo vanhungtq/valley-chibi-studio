@@ -14,7 +14,7 @@ Xưởng giữ cùng ID, snapshot, tiến độ và file; thu hồi claimToken c
 
 Nếu phiên cũ đã đóng, vẫn có thể bàn giao từ giao diện. Nếu không bấm bàn giao, phiên mới nhận lại sau khi lease cũ hết hạn (15 phút kể từ lần nhận/gia hạn cuối). **Chỉ phần đã đồng bộ về Xưởng được tiếp tục.** Chat và file chỉ nằm trong Codex cũ không tự chuyển tài khoản.
 
-Đầu việc đã nộp vẫn chờ bạn duyệt, không làm lại. Nếu brief/tư liệu đã đổi và task bị stale, giao task mới từ đầu vào hiện tại.
+Đầu việc đã nộp không làm lại. Nếu đang chờ duyệt, bạn có thể duyệt thủ công hoặc bật tự động để đi tiếp. Nếu brief/tư liệu đã đổi và task bị stale, giao task mới từ đầu vào hiện tại.
 
 ## 2. Kết nối trong tài khoản mới
 
@@ -33,7 +33,7 @@ Nếu cấu hình đã có, kiểm tra `codex mcp list` rồi đăng nhập lạ
 
 Bấm **Sao chép yêu cầu tiếp tục** trong Xưởng và dán vào phiên mới. Yêu cầu có URL và ID đầu việc thực tế. Bản tổng quát ở [CODEX_RESUME_PROMPT.vi.md](CODEX_RESUME_PROMPT.vi.md) và `/codex-resume-prompt.txt`.
 
-Codex đọc `studio_get_project`, `studio_list_tasks`, rồi `studio_get_task`. Đối chiếu dự án/tập, đọc tiến độ và artifact, đọc file cần thiết qua `studio_read_resource`, nhận bằng `studio_claim_task`. Tiếp tục làm, báo tiến độ, lưu file, nộp kết quả về cùng Xưởng rồi chờ bạn duyệt. Nếu chưa thấy công cụ MCP, hoàn tất kết nối rồi mở phiên mới; không giả lập đồng bộ hoặc mặc định có lịch sử chat cũ.
+Codex đọc `studio_get_project`, `studio_list_tasks`, rồi `studio_get_task`. Đối chiếu dự án/tập, đọc tiến độ và artifact, đọc file cần thiết qua `studio_read_resource`, nhận bằng `studio_claim_task`. Tiếp tục làm, báo tiến độ, lưu file, nộp kết quả về cùng Xưởng và theo chế độ duyệt của tập. Nếu awaitingHumanReview=true, dừng chờ duyệt. Nếu workflow.autoApprove=true và có nextTask, đọc studio_get_task, nhận bằng studio_claim_task và tiếp tục vai trò kế tiếp trong phiên hiện tại đến khi hoàn tất hoặc bị chặn. Chỉ chủ dự án bật/tắt chế độ trong Xưởng; không tự sửa state để duyệt. Nếu chưa thấy công cụ MCP, hoàn tất kết nối rồi mở phiên mới; không giả lập đồng bộ hoặc mặc định có lịch sử chat cũ.
 
 ## 4. Khi muốn tiếp tục sửa mã nguồn
 
