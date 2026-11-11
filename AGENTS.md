@@ -6,6 +6,14 @@ All creative work is performed in the user's current Codex / ChatGPT session, us
 
 The Site is a control room: it stores the project, hosts the Chibi interface, queues work, and synchronizes real progress and files through its own MCP plugin. Clicking a button queues a task; it does not start a hidden Codex session. Never display or report work as running before a successful claim.
 
+## Self-hosted Cloudflare from GitHub
+
+For a Cloudflare request, follow `docs/CLOUDFLARE.vi.md` and use `wrangler.jsonc`, `worker/cloudflare.js`, D1 `DB`, R2 `BUCKET`, KV `OAUTH_KV`, and Workers Static Assets. Do not register or republish a Site for this deployment mode. `npm run build` / `build:cloudflare` prepares Cloudflare assets; `npm run build:sites` retains the original Sites build.
+
+MCP is a stateless remote Streamable HTTP endpoint at `/mcp` using OAuth 2.1, PKCE S256, and GitHub for user identity. Keep incoming `oai-authenticated-*` headers untrusted on Cloudflare: only inject identity after checking a server-side session or OAuth token. Website and MCP share `github:<numeric-id>`. Every request rechecks the configured GitHub allowlist. Never expose GitHub OAuth secrets in source or chat, and never replace authenticated MCP with a public no-auth endpoint for convenience.
+
+Deployment is ready only after resource provisioning, D1 migrations, PUBLIC_ORIGIN/allowlist, and GitHub OAuth secrets are configured in the owner's account. A local dry-run or mocked OAuth test is not a production deployment or successful real GitHub/ChatGPT account link. State remains JSON in D1; this installation work does not imply indexed library search was implemented. Sites data/uploads do not transfer automatically.
+
 ## Installing in another ChatGPT account
 
 1. Read `docs/INSTALL.vi.md` and `docs/INSTALL_PROMPT.vi.md`.

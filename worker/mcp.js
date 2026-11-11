@@ -1,5 +1,6 @@
 import {readState,body,json,fail,outputSchema} from './api.js';
 import {listTasks,getTask,claimTask,reportProgress,submitResult,saveArtifact,readResource,closeTask} from './bridge.js';
+export const MCP_VERSIONS=['2026-07-28','2025-11-25','2025-06-18','2025-03-26'];
 const toolSchema=(properties={},required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
 const taskId={type:'string',description:'ID đầu việc từ studio_list_tasks.'};
 const claimToken={type:'string',description:'Token phiên nhận việc từ studio_claim_task; không ghi vào output công khai.'};
@@ -20,11 +21,11 @@ export async function handleMcp(request,env){
  const reply=result=>json({jsonrpc:'2.0',id:rpc.id??null,result});
  const error=(code,message)=>json({jsonrpc:'2.0',id:rpc.id??null,error:{code,message}});
  if(rpc.jsonrpc!=='2.0'||typeof rpc.method!=='string')return error(-32600,'Invalid JSON-RPC request');
- if(rpc.method==='server/discover')return reply({supportedVersions:['2026-07-28'],capabilities:{tools:{}}});
- if(rpc.method==='initialize')return reply({protocolVersion:'2026-07-28',capabilities:{tools:{}},serverInfo:{name:'valley-chibi-studio',version:'2.0.0'},instructions:'Codex thực hiện tác vụ do chủ dự án giao. Xưởng chỉ lưu và đồng bộ. Không gọi API mô hình, không tự duyệt.'});
- if(rpc.method==='notifications/initialized')return new Response(null,{status:204});
+ if(rpc.method==='server/discover')return reply({supportedVersions:MCP_VERSIONS,capabilities:{tools:{}}});
+ if(rpc.method==='initialize')return reply({protocolVersion:MCP_VERSIONS.includes(rpc.params?.protocolVersion)?rpc.params.protocolVersion:MCP_VERSIONS[0],capabilities:{tools:{}},serverInfo:{name:'valley-chibi-studio',version:'2.0.0'},instructions:'Codex thực hiện tác vụ do chủ dự án giao. Xưởng chỉ lưu và đồng bộ. Không gọi API mô hình, không tự duyệt.'});
+ if(rpc.method.startsWith('notifications/')&&rpc.id===undefined)return new Response(null,{status:202});
  if(rpc.method==='ping')return reply({});
- if(rpc.method==='tools/list')return reply({tools:MCP_TOOLS});
+ if(rpc.method==='tools/list')return reply({tools:env.MCP_OAUTH?MCP_TOOLS.map(t=>({...t,securitySchemes:[{type:'oauth2',scopes:['studio:access']}],_meta:{securitySchemes:[{type:'oauth2',scopes:['studio:access']}]}})):MCP_TOOLS});
  if(rpc.method!=='tools/call')return error(-32601,'Method not found');
  const owner=request.headers.get('oai-authenticated-user-id');if(!owner)return reply({content:[{type:'text',text:'Đăng nhập qua plugin riêng của Xưởng để đồng bộ đúng tài khoản.'}],isError:true});
  const args=rpc.params?.arguments||{},name=rpc.params?.name;

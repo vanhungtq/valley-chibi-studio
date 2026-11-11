@@ -1,0 +1,5 @@
+Hãy triển khai repo này lên tài khoản Cloudflare của tôi bằng Cloudflare Workers + D1 + R2 + KV. Đọc AGENTS.md và docs/CLOUDFLARE.vi.md. Dùng nhánh có wrangler.jsonc, Node 24, npm ci, npm test, npm run check và npm run cf:check. Giữ nguyên các migration đã áp dụng.
+
+MCP là Remote MCP Streamable HTTP tại https://<tên-miền-worker>/mcp, OAuth 2.1 với PKCE. Website đăng nhập GitHub; MCP dùng cùng danh tính github:<numeric-id>. Không tin các header oai-authenticated-* từ Internet. Các secret GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET phải nhập qua Cloudflare Settings hoặc Wrangler secret, không dán vào chat hay Git. PUBLIC_ORIGIN phải là origin HTTPS chính thức. Chỉ người trong GITHUB_ALLOWED_IDS hoặc GITHUB_ALLOWED_LOGINS được dùng dữ liệu.
+
+Chọn Workers → Continue with GitHub, không dùng Pages static. Build command npm run build:cloudflare; deploy command npm run deploy:cloudflare; root /. D1 binding DB, R2 BUCKET, KV OAUTH_KV. Gói này không gọi model API; mọi AI và tạo ảnh thực hiện trong phiên ChatGPT/Codex qua MCP. Ghi rõ phần chưa kiểm chứng do thiếu quyền Cloudflare/GitHub OAuth thật. Không tự chuyển dữ liệu Sites hoặc ghi đè dữ liệu cũ.

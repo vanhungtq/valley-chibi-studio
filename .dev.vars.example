@@ -1,0 +1,3 @@
+# Nhập secrets trong Cloudflare Settings; không gửi giá trị thật qua chat hoặc Git.
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
