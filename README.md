@@ -144,7 +144,7 @@ npm run check
 npm run build
 ```
 
-Kiểm thử OAuth bằng Chromium thật: `npx playwright-core install chromium --only-shell`, rồi `npm run test:browser:oauth`. CI chạy kiểm thử này để kiểm tra Origin của form, redirect/CSP, PKCE và chặn CSRF. GitHub được giả lập trong Miniflare, browser chạy offline; không dùng tài khoản hoặc Secret thật. Nếu dùng Chromium đã có, đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` bằng đường dẫn binary.
+Kiểm thử OAuth bằng Chromium thật: `npx playwright-core install chromium --only-shell`, rồi `npm run test:browser:oauth`. CI dùng Google Chrome có sẵn trên runner Ubuntu để kiểm tra Origin của form, redirect/CSP, PKCE và chặn CSRF. GitHub được giả lập trong Miniflare, browser chạy offline; không dùng tài khoản hoặc Secret thật. Nếu dùng Chromium đã có, đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` bằng đường dẫn binary.
 
 `linkedom`, Wrangler, Miniflare và Playwright Core là dev dependencies. Runtime OAuth dùng `@cloudflare/workers-oauth-provider`; không có dependency runtime gọi mô hình. `npm run build:sites` tạo `dist/server/index.js`, Worker ESM chứa assets và handler của bản Sites. Cloudflare dùng trực tiếp `worker/cloudflare.js` và Workers Static Assets. `.openai/hosting.json` dùng `d1: "DB"`, `r2: "BUCKET"`, `capabilities: ["mcp"]`.
 

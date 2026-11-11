@@ -66,7 +66,9 @@ Nhánh main của repo này đã đặt `PUBLIC_ORIGIN=https://valley-chibi-stud
 
 Không nhập secret vào GitHub, hình chụp công khai hoặc chat. Không cần khóa API mô hình.
 
-PUBLIC_ORIGIN và allowlist cũng có thể ghi vào vars trong wrangler.jsonc. Nếu chỉnh chúng ở Dashboard, đồng bộ lại vars tương ứng trong GitHub trước lần deploy tiếp theo để cấu hình nguồn không ghi đè. Hai secret không đặt trong vars.
+PUBLIC_ORIGIN và allowlist cũng có thể ghi vào vars trong wrangler.jsonc. Repo dùng `keep_vars: true` để giữ các biến Runtime thêm trong Dashboard nhưng chưa có trong cấu hình nguồn. Giá trị đã khai báo trong `vars` vẫn được áp dụng từ GitHub, nên nếu đổi PUBLIC_ORIGIN hoặc allowlist ở Dashboard cần đồng bộ lại các trường tương ứng trong repo. Hai thông tin OAuth chọn đúng loại **Secret**, lưu ở Worker Runtime → Settings → Variables and Secrets, không ở Build variables và không đặt trong `vars` của Git.
+
+Nếu `/healthz` chuyển từ `authConfigured: true` sang `false` sau một lần deploy, kiểm tra và lưu lại `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` dưới loại Secret rồi Save/Deploy. Giữ nguyên GitHub OAuth App và callback đã tạo; không gửi giá trị Secret vào chat.
 
 Nếu dùng custom domain, cập nhật PUBLIC_ORIGIN và GitHub OAuth callback cho domain mới. Dùng một origin chính thức; hostname khác bị từ chối. Không đặt Cloudflare Access login HTML trước /mcp, /oauth/*, /authorize hay /.well-known/* vì MCP client cần tự thực hiện OAuth. Bản này tự xác thực các endpoint đó.
 

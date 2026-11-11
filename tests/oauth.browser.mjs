@@ -9,7 +9,7 @@ import {esc} from '../worker/cloudflare/security.js';
 const {Miniflare,convertV4MiniflareOptions}=mfPackage;
 const ORIGIN='https://studio.test',CLIENT='https://client.test/callback',ATTACKER='https://attacker.test';
 
-test('real browser OAuth consent submits its own Origin and rejects foreign/opaque origins',async t=>{
+test('real browser OAuth consent submits its own Origin and rejects foreign/opaque origins',{timeout:120000},async t=>{
  let mf,browser;
  t.after(async()=>{await browser?.close();await mf?.dispose();});
  mf=new Miniflare(convertV4MiniflareOptions({workers:[{
