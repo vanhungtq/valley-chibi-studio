@@ -9,9 +9,9 @@
   "assets": {"directory": "./public", "binding": "ASSETS", "run_worker_first": true},
   "build": {"command": "npm run build:cloudflare"},
   "vars": {
-    "PUBLIC_ORIGIN": "",
+    "PUBLIC_ORIGIN": "https://valley-chibi-studio.vanhungtq1.workers.dev",
     "GITHUB_ALLOWED_LOGINS": "",
-    "GITHUB_ALLOWED_IDS": ""
+    "GITHUB_ALLOWED_IDS": "132463035"
   },
   // deploy:cloudflare reuses existing D1/KV resources by exact default name.
   // Explicit database_id/id values take precedence, including custom-named resources.

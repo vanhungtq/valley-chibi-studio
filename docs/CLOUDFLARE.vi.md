@@ -62,6 +62,8 @@ Trong Cloudflare Worker → Settings → Variables and Secrets, đặt:
 - GITHUB_CLIENT_ID: Client ID của OAuth App — lưu dạng Secret.
 - GITHUB_CLIENT_SECRET: Client Secret — lưu dạng Secret.
 
+Nhánh main của repo này đã đặt `PUBLIC_ORIGIN=https://valley-chibi-studio.vanhungtq1.workers.dev` và `GITHUB_ALLOWED_IDS=132463035` (tài khoản `vanhungtq`). GitHub ID được dùng để quyền truy cập không phụ thuộc việc đổi username. Nếu cài sang tài khoản hoặc Worker khác, thay hai giá trị này trước khi deploy. Callback của bản hiện tại là `https://valley-chibi-studio.vanhungtq1.workers.dev/auth/callback`. Hai Secret OAuth vẫn nhập riêng trong Cloudflare; không ghi vào cấu hình Git.
+
 Không nhập secret vào GitHub, hình chụp công khai hoặc chat. Không cần khóa API mô hình.
 
 PUBLIC_ORIGIN và allowlist cũng có thể ghi vào vars trong wrangler.jsonc. Nếu chỉnh chúng ở Dashboard, đồng bộ lại vars tương ứng trong GitHub trước lần deploy tiếp theo để cấu hình nguồn không ghi đè. Hai secret không đặt trong vars.
