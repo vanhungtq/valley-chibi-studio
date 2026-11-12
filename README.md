@@ -176,6 +176,8 @@ Lệnh này cần đích chưa tồn tại, ở ngoài checkout. Không chép Gi
 
 ## Nghiên cứu và hướng mở rộng
 
+Đối chiếu mới: [Nâng cấp Agents từ OpenMontage](docs/OPENMONTAGE_RESEARCH.vi.md), ngày 12/11/2026. Báo cáo đề xuất skill theo vai trò, hợp đồng đầu ra, review trước tự động duyệt, phân tích reference có chứng cứ, continuity và checkpoint theo cảnh. Đây là lộ trình nghiên cứu; các nâng cấp được đề xuất chưa được triển khai trong ứng dụng.
+
 Repo được cung cấp [awesome-ai-agents-2026](https://github.com/caramaschiHG/awesome-ai-agents-2026) là danh mục công cụ, không phải mã nguồn một xưởng phim. Tài liệu upstream của [LangGraph](https://github.com/langchain-ai/langgraph) và [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) được đối chiếu để đánh giá workflow, handoff và người duyệt. Bản này không tích hợp các SDK đó hoặc gọi API của chúng; Codex là nơi thực hiện nội dung, MCP là kênh đồng bộ.
 
 Mở rộng nên ưu tiên khảo sát/trợ lý sản xuất, quản lý tri thức có nguồn, continuity và biên tập quốc tế. Những chức năng này trước mắt được kiểm tra trong trách nhiệm 5 vai trò. Thêm agent phụ khi khối lượng và khả năng của phiên Codex thực sự cần.
