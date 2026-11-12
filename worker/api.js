@@ -1,3 +1,4 @@
+import {validateEpisodeDossiers} from './episode-dossiers.js';
 import { AGENTS, STAGES, seedState, SCENES } from '../public/data.js';
 import {handleTasks,reconcileReviews,setWorkflow,continueWorkflow,startEpisode} from './bridge.js';
 import {targetMinutes,approveEpisode} from '../public/workflow.js';
@@ -67,6 +68,7 @@ function validState(v,owner){
   const shotIds=new Set(e.scenes.flatMap(s=>s.shots.map(sh=>sh.id)));
   for(const [id,b] of Object.entries(e.storyboards))if(!shotIds.has(id)||!isObj(b)||!linked(b.assetId,'image',e.id)||!(b.panel===null||Number.isInteger(b.panel)&&b.panel>=0&&b.panel<4)||typeof b.generated!=='boolean')throw fail(400,'Ảnh storyboard phải liên kết đúng shot và tài nguyên.');
  }
+ validateEpisodeDossiers(v);
 }
 export function validateScenes(scenes){
  if(!Array.isArray(scenes)||scenes.length>40)throw fail(400,'Phân cảnh không hợp lệ.');

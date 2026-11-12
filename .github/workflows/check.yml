@@ -15,7 +15,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
-      - run: npm run test:browser:oauth
+      - run: npm run test:browser:oauth && npm run test:browser:dossiers
         timeout-minutes: 3
         env:
           PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: /usr/bin/google-chrome
