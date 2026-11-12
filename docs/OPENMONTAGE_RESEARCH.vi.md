@@ -2,7 +2,7 @@
 
 Ngày nghiên cứu: 12/11/2026, giờ Việt Nam.
 
-**Trạng thái: đề xuất kiến trúc và quy trình. Tài liệu này chưa triển khai các tính năng được đề xuất.** Không cài hoặc chạy OpenMontage, không gọi API mô hình, không thay đổi dữ liệu sản xuất của Xưởng.
+**Cập nhật: đợt 1 (skill, hợp đồng đầu ra và self-review) đã triển khai trong bản 2.1. Xem [hướng dẫn vận hành](PRODUCTION_WORKFLOW.vi.md).** Các nhận xét đối chiếu bên dưới mô tả baseline 4613c39; các đợt tiếp theo vẫn là đề xuất. Không cài hoặc chạy OpenMontage, không gọi API mô hình, không thay đổi dữ liệu sản xuất của Xưởng.
 
 - Nguồn nghiên cứu: [OpenMontage](https://github.com/OpenMontageInc/OpenMontage), commit [`fecb9a1`](https://github.com/OpenMontageInc/OpenMontage/commit/fecb9a1e3cc23ef84de30b272059457a427f16f8).
 - Đối chiếu Xưởng: commit [`4613c39`](https://github.com/vanhungtq/valley-chibi-studio/commit/4613c39a5b571627045ee3aba002285ef082042d).

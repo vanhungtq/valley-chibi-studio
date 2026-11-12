@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import mfPackage from 'miniflare';
 import {s256} from '../worker/cloudflare/github.js';
 import {sampleOutput} from '../worker/api.js';
+import {reviewedOutput} from './production-fixtures.mjs';
 import {seedEpisode} from '../public/data.js';
 const {Miniflare,convertV4MiniflareOptions}=mfPackage;
 const ORIGIN='https://studio.test';let mf;
@@ -12,7 +13,7 @@ async function request(path,options={},jar){const headers=new Headers(options.he
 async function githubLogin(jar,code='alice'){const login=await request('/auth/login',{},jar);assert.equal(login.status,302);const target=new URL(login.headers.get('location'));assert.equal(target.origin,'https://github.com');assert.equal(target.searchParams.get('code_challenge_method'),'S256');return request('/auth/callback?'+new URLSearchParams({state:target.searchParams.get('state'),code}),{},jar);}
 before(async()=>{
  mf=new Miniflare(convertV4MiniflareOptions({workers:[{name:'studio',modules:true,scriptPath:'.cloudflare-build/cloudflare.js',compatibilityDate:'2026-11-11',compatibilityFlags:['nodejs_compat','global_fetch_strictly_public'],kvNamespaces:['OAUTH_KV','FILES_KV'],d1Databases:['DB'],bindings:{PUBLIC_ORIGIN:ORIGIN,GITHUB_ALLOWED_LOGINS:'alice',GITHUB_CLIENT_ID:'test-client',GITHUB_CLIENT_SECRET:'test-secret'},serviceBindings:{ASSETS:()=>new Response('<html>app</html>',{headers:{'content-type':'text/html'}})},outboundService:async request=>{const url=new URL(request.url);if(url.origin==='https://github.com'&&url.pathname==='/login/oauth/access_token'){const data=new URLSearchParams(await request.text());assert.equal(data.get('client_secret'),'test-secret');assert.ok(data.get('code_verifier').length>=43);return Response.json({access_token:'mock-'+data.get('code')});}if(url.origin==='https://api.github.com'&&url.pathname==='/user'){const alice=request.headers.get('authorization')==='Bearer mock-alice';return Response.json({id:alice?123:456,login:alice?'alice':'mallory',name:alice?'Alice':'Mallory'});}throw new Error('Unexpected outbound request '+url.origin+url.pathname);}}]}));
- const db=await mf.getD1Database('DB','studio');for(const file of ['0000_studio.sql','0001_codex_tasks.sql']){const sql=await readFile(new URL('../drizzle/'+file,import.meta.url),'utf8');for(const statement of sql.split(';').map(s=>s.trim()).filter(Boolean))await db.prepare(statement).run();}
+ const db=await mf.getD1Database('DB','studio');for(const file of ['0000_studio.sql','0001_codex_tasks.sql','0002_production_review.sql']){const sql=await readFile(new URL('../drizzle/'+file,import.meta.url),'utf8');for(const statement of sql.split(';').map(s=>s.trim()).filter(Boolean))await db.prepare(statement).run();}
 });
 after(async()=>{await mf?.dispose();});
 test('Cloudflare entry protects API/MCP, publishes OAuth discovery and serves the app with CSP',async()=>{const response=await request('/api/state',{headers:{'oai-authenticated-user-id':'victim'}});assert.equal(response.status,401);const mcp=await request('/mcp',{method:'POST',body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'}),headers:{'content-type':'application/json','oai-authenticated-user-id':'victim'}});assert.equal(mcp.status,401);assert.match(mcp.headers.get('www-authenticate'),/oauth-protected-resource/);const metadata=await(await request('/.well-known/oauth-authorization-server')).json();assert.ok(metadata.code_challenge_methods_supported.includes('S256'));assert.equal(metadata.registration_endpoint,ORIGIN+'/oauth/register');assert.equal((await(await request('/healthz')).json()).databaseReady,true);assert.match((await request('/')).headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.equal((await mf.dispatchFetch('https://wrong.test/api/config')).status,421);});
@@ -26,14 +27,14 @@ test('OAuth consent, GitHub login, PKCE token, refresh token and MCP tools share
  const callback=await request('/auth/callback?'+new URLSearchParams({state:github.searchParams.get('state'),code:'alice'}),{},jar);assert.equal(callback.status,302,await callback.clone().text());const result=new URL(callback.headers.get('location'));assert.equal(result.searchParams.get('state'),'client-state');assert.equal(result.searchParams.get('iss'),ORIGIN);
  const exchange=await request('/oauth/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code:result.searchParams.get('code'),client_id:client.client_id,redirect_uri:'https://client.test/callback',code_verifier:verifier,resource:ORIGIN+'/mcp'}).toString()});assert.equal(exchange.status,200,await exchange.clone().text());const token=await exchange.json();assert.ok(token.refresh_token);
  const rpc=async(method,params={})=>{const response=await request('/mcp',{method:'POST',headers:{authorization:'Bearer '+token.access_token,'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});assert.equal(response.status,200,await response.clone().text());return response.json();};
- assert.equal((await rpc('initialize',{protocolVersion:'2025-03-26'})).result.protocolVersion,'2025-03-26');assert.equal((await rpc('tools/list')).result.tools.length,9);const project=await rpc('tools/call',{name:'studio_get_project',arguments:{}});assert.equal(JSON.parse(project.result.content[0].text).state.project.name,'Cloudflare Alice');
+ assert.equal((await rpc('initialize',{protocolVersion:'2025-03-26'})).result.protocolVersion,'2025-03-26');assert.equal((await rpc('tools/list')).result.tools.length,10);const project=await rpc('tools/call',{name:'studio_get_project',arguments:{}});assert.equal(JSON.parse(project.result.content[0].text).state.project.name,'Cloudflare Alice');
  assert.equal((await request('/mcp',{method:'POST',headers:{'content-type':'application/json'},body:'{}'},jar)).status,401);
  const queued=await request('/api/tasks',{method:'POST',headers:{Origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({episodeId:'ep-01'})},jar);assert.equal(queued.status,201);const task=(await queued.json()).task;
  const claim=await rpc('tools/call',{name:'studio_claim_task',arguments:{task_id:task.id}}),claimData=JSON.parse(claim.result.content[0].text);assert.ok(claimData.claimToken);
  const progress=await rpc('tools/call',{name:'studio_report_progress',arguments:{task_id:task.id,claim_token:claimData.claimToken,message:'Đã đọc brief. Đang chuẩn bị bản bàn giao.'}});assert.equal(progress.result.isError,undefined);
  const polled=(await(await request('/api/tasks',{},jar)).json()).tasks.find(t=>t.id===task.id);assert.equal(polled.status,'running');assert.match(polled.progress,/Đã đọc brief/);
  const saved=await rpc('tools/call',{name:'studio_save_artifact',arguments:{task_id:task.id,claim_token:claimData.claimToken,filename:'brief.txt',mime:'text/plain',encoding:'utf8',content:'Brief lưu bằng KV'}});const artifact=JSON.parse(saved.result.content[0].text);assert.ok(artifact.id);assert.equal(await(await request(artifact.url,{},jar)).text(),'Brief lưu bằng KV');const read=await rpc('tools/call',{name:'studio_read_resource',arguments:{resource_id:artifact.id}});assert.match(read.result.content[0].text,/Brief lưu bằng KV/);
- const submitted=await rpc('tools/call',{name:'studio_submit_result',arguments:{task_id:task.id,claim_token:claimData.claimToken,output:sampleOutput(0)}});assert.equal(JSON.parse(submitted.result.content[0].text).awaitingHumanReview,true);assert.equal((await(await request('/api/tasks',{},jar)).json()).tasks.find(t=>t.id===task.id).status,'awaiting_review');
+ const submitted=await rpc('tools/call',{name:'studio_submit_result',arguments:{task_id:task.id,claim_token:claimData.claimToken,output:reviewedOutput(sampleOutput(0),0)}});assert.equal(JSON.parse(submitted.result.content[0].text).awaitingHumanReview,true);assert.equal((await(await request('/api/tasks',{},jar)).json()).tasks.find(t=>t.id===task.id).status,'awaiting_review');
  const refresh=await request('/oauth/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:token.refresh_token,client_id:client.client_id,resource:ORIGIN+'/mcp'}).toString()});assert.equal(refresh.status,200,await refresh.clone().text());
  assert.equal((await request('/auth/logout',{method:'POST',headers:{Origin:ORIGIN}},jar)).status,200);assert.equal((await(await request('/api/config',{},jar)).json()).signedIn,false);
 });
@@ -56,6 +57,22 @@ async function codexClient(name){
  return {jar,client,token,tool};
 }
 
+test('OAuth owner starts a thirty-minute production and cached MCP output gains the new contract',async()=>{
+ const client=await codexClient('codex-production'),current=JSON.parse((await client.tool('studio_get_project')).content[0].text);
+ const episode={...seedEpisode(),id:crypto.randomUUID(),title:'Quy trình chuyên môn',sample:false};current.state.episodes.push(episode);
+ const saved=await request('/api/state',{method:'PUT',headers:{Origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({state:current.state,revision:current.revision})},client.jar);assert.equal(saved.status,200);
+ const revision=(await saved.json()).revision;
+ const started=await client.tool('studio_start_episode',{episode_id:episode.id,target_minutes:30,auto_approve:true,expected_revision:revision});assert.equal(started.isError,undefined);
+ const start=JSON.parse(started.content[0].text);assert.equal(start.episode.targetMinutes,30);assert.equal(start.episode.autoApprove,true);
+ const packet=JSON.parse((await client.tool('studio_get_task',{task_id:start.task.id})).content[0].text);assert.equal(packet.productionPolicy.required,true);assert.equal(packet.skills.length,3);
+ const claim=JSON.parse((await client.tool('studio_claim_task',{task_id:start.task.id})).content[0].text).claimToken;
+ const output=reviewedOutput(sampleOutput(0),0,{targetMinutes:30}),production=output.production;delete output.production;output.content+='\n```valley-production\n'+JSON.stringify(production)+'\n```';
+ const submitted=await client.tool('studio_submit_result',{task_id:start.task.id,claim_token:claim,output});assert.equal(submitted.isError,undefined);
+ const result=JSON.parse(submitted.content[0].text);assert.equal(result.task.status,'approved');assert.equal(result.nextTask.stage,1);
+ const after=JSON.parse((await client.tool('studio_get_project')).content[0].text).state.episodes.find(e=>e.id===episode.id);
+ assert.equal(after.outputs[0].quality.verdict,'passed');assert.equal(after.outputs[0].production.data.targetMinutes,30);assert.ok(!after.outputs[0].content.includes('valley-production'));
+});
+
 test('Cloudflare owner enables automatic MCP handoff then switches a running role back to manual',async()=>{
  const client=await codexClient('codex-automatic'),current=await(await request('/api/state',{},client.jar)).json();
  const episode={...seedEpisode(),id:crypto.randomUUID(),title:'Tập 30 phút',sample:false,targetMinutes:30};
@@ -67,12 +84,12 @@ test('Cloudflare owner enables automatic MCP handoff then switches a running rol
  const first=(await enabled.json()).nextTask,packet=JSON.parse((await client.tool('studio_get_task',{task_id:first.id})).content[0].text);
  assert.equal(packet.context.episode.targetMinutes,30);assert.equal(packet.workflow.autoApprove,true);
  const token=JSON.parse((await client.tool('studio_claim_task',{task_id:first.id})).content[0].text).claimToken;
- const submitted=await client.tool('studio_submit_result',{task_id:first.id,claim_token:token,output:sampleOutput(0)});
+ const submitted=await client.tool('studio_submit_result',{task_id:first.id,claim_token:token,output:reviewedOutput(sampleOutput(0),0,{targetMinutes:30})});
  assert.equal(submitted.isError,undefined);const result=JSON.parse(submitted.content[0].text);
  assert.equal(result.task.status,'approved');assert.equal(result.nextTask.stage,1);assert.equal(result.awaitingHumanReview,false);
  const next=result.nextTask,nextToken=JSON.parse((await client.tool('studio_claim_task',{task_id:next.id})).content[0].text).claimToken;
  assert.equal((await post('/api/workflow',{episodeId:episode.id,autoApprove:false})).status,200);
- const manual=await client.tool('studio_submit_result',{task_id:next.id,claim_token:nextToken,output:sampleOutput(1)});
+ const manual=await client.tool('studio_submit_result',{task_id:next.id,claim_token:nextToken,output:reviewedOutput(sampleOutput(1),1)});
  assert.equal(manual.isError,undefined);assert.equal(JSON.parse(manual.content[0].text).awaitingHumanReview,true);
  const final=(await(await request('/api/state',{},client.jar)).json()).state.episodes.find(e=>e.id===episode.id);
  assert.equal(final.stage,1);assert.deepEqual(final.approved,[0]);assert.equal(final.outputs[0].approval.mode,'automatic');assert.equal(final.autoApprove,false);
@@ -94,12 +111,12 @@ test('two independently authorized Codex clients continue the same Cloudflare pr
  const artifact=JSON.parse((await first.tool('studio_save_artifact',{task_id:task.id,claim_token:oldClaim,filename:'resume.md',mime:'text/markdown',encoding:'utf8',content:'Dàn ý đã lưu từ Codex thứ nhất.'})).content[0].text);
  assert.equal((await request('/api/tasks/'+task.id+'/handoff',{method:'POST',headers:{Origin:'https://wrong.test'}},first.jar)).status,403);
  assert.equal((await request('/api/tasks/'+task.id+'/handoff',{method:'POST',headers:{Origin:ORIGIN}},first.jar)).status,200);
- assert.equal((await first.tool('studio_submit_result',{task_id:task.id,claim_token:oldClaim,output:sampleOutput(0)})).isError,true);
+ assert.equal((await first.tool('studio_submit_result',{task_id:task.id,claim_token:oldClaim,output:reviewedOutput(sampleOutput(0),0)})).isError,true);
  const packet=JSON.parse((await second.tool('studio_get_task',{task_id:task.id})).content[0].text);
  assert.match(packet.task.progress,/cần bổ sung lịch quay/);assert.equal(packet.task.artifacts[0].id,artifact.id);
  assert.match((await second.tool('studio_read_resource',{resource_id:artifact.id})).content[0].text,/Codex thứ nhất/);
  const claim=JSON.parse((await second.tool('studio_claim_task',{task_id:task.id})).content[0].text).claimToken;assert.notEqual(claim,oldClaim);
- const submitted=await second.tool('studio_submit_result',{task_id:task.id,claim_token:claim,output:sampleOutput(0)});
+ const submitted=await second.tool('studio_submit_result',{task_id:task.id,claim_token:claim,output:reviewedOutput(sampleOutput(0),0)});
  assert.equal(submitted.isError,undefined);assert.equal(JSON.parse(submitted.content[0].text).awaitingHumanReview,true);
  const result=await(await request('/api/state',{},second.jar)).json();
  assert.equal(result.state.episodes.find(e=>e.id===episode.id).outputs[0].artifacts[0].id,artifact.id);

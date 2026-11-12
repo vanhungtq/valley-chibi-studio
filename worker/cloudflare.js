@@ -32,7 +32,7 @@ export default {async fetch(request,env,ctx){
  try{
   const path=new URL(request.url).pathname;
   if(path==='/healthz'){
-   let databaseReady=false;try{databaseReady=!!(await env.DB?.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='codex_tasks'").first());}catch{}
+   let databaseReady=false;try{databaseReady=!!(await env.DB?.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='codex_tasks'").first());if(databaseReady)await env.DB.prepare('SELECT review, review_attempts FROM codex_tasks LIMIT 1').all();}catch{databaseReady=false;}
    const authConfigured=!!env.PUBLIC_ORIGIN&&!!env.GITHUB_CLIENT_ID&&!!env.GITHUB_CLIENT_SECRET&&!!(env.GITHUB_ALLOWED_IDS||env.GITHUB_ALLOWED_LOGINS);
    return Response.json({service:'valley-chibi-studio',transport:'streamable-http',mcpPath:'/mcp',databaseReady,filesReady:!!env.BUCKET,storageProvider:env.FILE_STORAGE_DRIVER,maxUploadBytes:env.FILE_MAX_BYTES,oauthStorageReady:!!env.OAUTH_KV,authConfigured},{status:databaseReady&&authConfigured&&!!env.BUCKET&&!!env.OAUTH_KV?200:503,headers:{'Cache-Control':'no-store'}});
   }

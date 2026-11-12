@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {parseHTML} from 'linkedom';
 import {DatabaseSync} from 'node:sqlite';
 import {readFile} from 'node:fs/promises';
-import {handleApi} from '../worker/api.js';
+import {handleApi,sampleOutput} from '../worker/api.js';
+import {handleMcp} from '../worker/mcp.js';
 import {seedState} from '../public/data.js';
 
 test('DOM integration: navigation, notes, sample review, revisions, and new episode',async()=>{
@@ -11,10 +12,11 @@ test('DOM integration: navigation, notes, sample review, revisions, and new epis
  const selectPrototype=Object.getPrototypeOf(window.document.createElement('select')),selectValue=Object.getOwnPropertyDescriptor(selectPrototype,'value');if(!selectValue.set)Object.defineProperty(selectPrototype,'value',{...selectValue,set(value){for(const option of this.querySelectorAll('option'))option.toggleAttribute('selected',option.value===value);}});
  const saved={};for(const k of ['window','document','location','FormData','fetch','setInterval','setTimeout'])saved[k]=globalThis[k];
  const nativeTimeout=globalThis.setTimeout;
- const sqlite=new DatabaseSync(':memory:');sqlite.exec((await readFile(new URL('../drizzle/0000_studio.sql',import.meta.url),'utf8'))+'\n'+await readFile(new URL('../drizzle/0001_codex_tasks.sql',import.meta.url),'utf8'));
+ const sqlite=new DatabaseSync(':memory:');sqlite.exec((await readFile(new URL('../drizzle/0000_studio.sql',import.meta.url),'utf8'))+'\n'+await readFile(new URL('../drizzle/0001_codex_tasks.sql',import.meta.url),'utf8')+'\n'+await readFile(new URL('../drizzle/0002_production_review.sql',import.meta.url),'utf8'));
  const env={DB:{prepare(sql){return {bind(...args){return {async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){return {meta:{changes:Number(sqlite.prepare(sql).run(...args).changes)}};}};}};}},BUCKET:{async put(){},get:async()=>null,async delete(){}}};
+ env.DB.batch=async statements=>{sqlite.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());sqlite.exec('COMMIT');return results;}catch(error){sqlite.exec('ROLLBACK');throw error;}};
  const NativeFormData=saved.FormData;
- class DOMFormData extends NativeFormData{constructor(form){super();if(form)for(const node of form.querySelectorAll('[name]')){if(node.disabled)continue;const name=node.name||node.getAttribute('name');if(node.localName==='select'){const opts=[...node.querySelectorAll('option')];let selected=opts.filter(o=>o.hasAttribute('selected'));if(!selected.length&&!node.hasAttribute('multiple'))selected=opts.slice(0,1);for(const o of selected)this.append(name,o.getAttribute('value')??o.textContent);}else this.set(name,node.value??'');}}}
+ class DOMFormData extends NativeFormData{constructor(form){super();if(form)for(const node of form.querySelectorAll('[name]')){if(node.disabled||node.type==='checkbox'&&!node.checked)continue;const name=node.name||node.getAttribute('name');if(node.localName==='select'){const opts=[...node.querySelectorAll('option')];let selected=opts.filter(o=>o.hasAttribute('selected'));if(!selected.length&&!node.hasAttribute('multiple'))selected=opts.slice(0,1);for(const o of selected)this.append(name,o.getAttribute('value')??o.textContent);}else this.set(name,node.value??'');}}}
  Object.assign(globalThis,{window,document:window.document,location:{hash:'#library',origin:'https://studio.test'},FormData:DOMFormData,setInterval:()=>0,setTimeout:(fn,ms)=>{const timer=nativeTimeout(fn,ms);timer.unref();return timer;}});
  const displayPreferences=new Map();window.localStorage={getItem:key=>displayPreferences.get(key)||null,setItem:(key,value)=>displayPreferences.set(key,value)};
  window.scrollTo=()=>{};
@@ -54,10 +56,11 @@ test('DOM integration: navigation, notes, sample review, revisions, and new epis
   await click('[data-action="stage-detail"][data-stage="0"]');await click('[data-action="revise-stage"]');document.querySelector('#revision-text').value='Thêm khảo sát hướng nắng.';await submit('#revision-form');assert.equal(stored().episodes[0].stage,0);assert.deepEqual(stored().episodes[0].approved,[]);assert.equal(stored().episodes[0].outputs[0],undefined);
   await click('[data-page="episodes"]');await click('[data-action="new-episode"]');document.querySelector('#ep-title').value='Mùa mận';document.querySelector('#ep-english').value='Plum Season';document.querySelector('#ep-brief').value='Hai chị em thu hoạch mận và làm mứt.';await submit('#brief-form');
   assert.equal(stored().episodes.length,2);assert.equal(stored().episodes[1].sample,false);assert.equal(stored().episodes[1].scenes.length,0);assert.equal(stored().episodes[1].targetMinutes,30);assert.match(document.querySelector('.episode-meta').textContent,/30 phút mục tiêu/);assert.match(document.querySelector('.episode-title').textContent,/Mùa mận/);
-  await click('[data-action="run-codex"]');assert.equal(sqlite.prepare('SELECT status FROM codex_tasks ORDER BY created_at DESC LIMIT 1').get().status,'queued');assert.match(document.querySelector('.codex-task-box').textContent,/chờ Codex nhận/i);assert.match(document.querySelector('.agent-state').textContent,/Chờ Codex nhận/);assert.equal(document.querySelectorAll('.agent-label.running').length,0);
+  await click('[data-action="start-production"]');assert.equal(document.querySelector('#run-minutes').value,'30');await submit('#production-run-form');assert.equal(sqlite.prepare('SELECT status FROM codex_tasks ORDER BY created_at DESC LIMIT 1').get().status,'queued');assert.match(document.querySelector('.codex-task-box').textContent,/chờ Codex nhận/i);assert.match(document.querySelector('.agent-state').textContent,/Chờ Codex nhận/);assert.equal(document.querySelectorAll('.agent-label.running').length,0);
   const task=sqlite.prepare('SELECT id FROM codex_tasks ORDER BY created_at DESC LIMIT 1').get();
   sqlite.prepare("UPDATE codex_tasks SET status = 'running', claim_token = 'old-session', lease_until = ?, progress = 'Bản nháp đã lưu' WHERE id = ?").run(Date.now()+600000,task.id);
-  await click('[data-action="close-modal"]');await click('[data-action="refresh-tasks"]');
+  const rejected=await handleMcp(new Request('https://studio.test/mcp',{method:'POST',headers:{'content-type':'application/json','oai-authenticated-user-id':'ui-tester'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'studio_submit_result',arguments:{task_id:task.id,claim_token:'old-session',output:sampleOutput(0)}}})}),env);assert.equal((await rejected.json()).result.isError,true);
+  await click('[data-action="close-modal"]');await click('[data-action="refresh-tasks"]');assert.match(document.querySelector('.quality-feedback').textContent,/Cần chỉnh trước khi bàn giao/);
   await click('[data-action="toggle-auto-approve"]');assert.equal(stored().episodes[1].autoApprove,true);assert.equal(document.querySelector('[role="switch"]').getAttribute('aria-checked'),'true');
   await click('[data-action="toggle-auto-approve"]');assert.equal(stored().episodes[1].autoApprove,false);assert.equal(sqlite.prepare('SELECT claim_token FROM codex_tasks WHERE id = ?').get(task.id).claim_token,'old-session');
   await click('[data-action="refresh-tasks"]');await click('[data-action="connect-codex"][data-id]');

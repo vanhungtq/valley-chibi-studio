@@ -1,6 +1,8 @@
 import { AGENTS, STAGES, seedState, SCENES } from '../public/data.js';
-import {handleTasks,reconcileReviews,setWorkflow,continueWorkflow} from './bridge.js';
+import {handleTasks,reconcileReviews,setWorkflow,continueWorkflow,startEpisode} from './bridge.js';
 import {targetMinutes,approveEpisode} from '../public/workflow.js';
+import {GENERIC_PRODUCTION_SCHEMA} from './production/contracts.js';
+import {WORKFLOW} from './production/manifest.js';
 
 export const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 export const fail=(status,message)=>Object.assign(new Error(message),{status});
@@ -96,7 +98,7 @@ export function chooseResources(state,e){
 const STR={type:'string'};
 const shotSchema={type:'object',properties:{id:STR,size:STR,lens:STR,move:STR,action:STR,seconds:{type:'integer'},sound:STR,light:STR,assetIds:{type:'array',items:STR},note:STR},required:['id','size','lens','move','action','seconds','sound','light','assetIds','note'],additionalProperties:false};
 const sceneSchema={type:'object',properties:{id:STR,title:STR,time:STR,location:STR,emotion:STR,summary:STR,sound:STR,palette:STR,image:STR,shots:{type:'array',items:shotSchema}},required:['id','title','time','location','emotion','summary','sound','palette','image','shots'],additionalProperties:false};
-export const outputSchema={type:'object',properties:{title:STR,summary:STR,content:STR,missing:{type:'array',items:STR},sources:{type:'array',items:STR},scenes:{type:'array',items:sceneSchema}},required:['title','summary','content','missing','sources','scenes'],additionalProperties:false};
+export const outputSchema={type:'object',properties:{title:STR,summary:STR,content:STR,missing:{type:'array',items:STR},sources:{type:'array',items:STR},scenes:{type:'array',items:sceneSchema},production:GENERIC_PRODUCTION_SCHEMA},required:['title','summary','content','missing','sources','scenes'],additionalProperties:false};
 
 export async function handleApi(request,env){
  try{
@@ -104,6 +106,8 @@ export async function handleApi(request,env){
  if(path==='/api/config'&&request.method==='GET')return json({executionMode:'codex',externalModelCalls:false,bridgeReady:!!env.DB&&!!env.BUCKET,storageReady:!!env.DB&&!!env.BUCKET,signedIn:!!owner,displayName:clean(request.headers.get('oai-authenticated-user-full-name')||request.headers.get('oai-authenticated-user-email')||'Nhà sáng tạo'),storageProvider:env.FILE_STORAGE_DRIVER||'r2',maxUploadBytes:env.FILE_MAX_BYTES||MAX_FILE});
  if(!owner)throw fail(401,'Vui lòng đăng nhập để mở dự án.');
  if(!env.DB||!env.BUCKET)throw fail(503,'Kho lưu trữ của studio chưa sẵn sàng.');
+ if(path==='/api/production'&&request.method==='GET')return json(WORKFLOW);
+ if(path==='/api/episodes/start'&&request.method==='POST')return json(await startEpisode(env,owner,await body(request)));
  if(path.startsWith('/api/tasks'))return await handleTasks(request,env,owner);
  if(path==='/api/workflow'&&request.method==='POST'){const b=await body(request);return json(await setWorkflow(env,owner,b.episodeId,b.autoApprove));}
  if(path==='/api/state'){

@@ -28,7 +28,7 @@ test('real browser OAuth consent submits its own Origin and rejects foreign/opaq
   }
  }]}));
  const db=await mf.getD1Database('DB','studio');
- for(const name of ['0000_studio.sql','0001_codex_tasks.sql']){
+ for(const name of ['0000_studio.sql','0001_codex_tasks.sql','0002_production_review.sql']){
   const sql=await readFile(new URL('../drizzle/'+name,import.meta.url),'utf8');
   for(const statement of sql.split(';').map(s=>s.trim()).filter(Boolean))await db.prepare(statement).run();
  }

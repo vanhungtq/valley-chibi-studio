@@ -1,18 +1,19 @@
 import {readState,body,json,fail,outputSchema} from './api.js';
-import {listTasks,getTask,claimTask,reportProgress,submitResult,saveArtifact,readResource,closeTask} from './bridge.js';
+import {listTasks,getTask,claimTask,reportProgress,submitResult,saveArtifact,readResource,closeTask,startEpisode} from './bridge.js';
 export const MCP_VERSIONS=['2026-07-28','2025-11-25','2025-06-18','2025-03-26'];
 const toolSchema=(properties={},required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
 const taskId={type:'string',description:'ID đầu việc từ studio_list_tasks.'};
 const claimToken={type:'string',description:'Token phiên nhận việc từ studio_claim_task; không ghi vào output công khai.'};
 export const MCP_TOOLS=[
  {name:'studio_get_project',description:'Đọc nền tảng dự án, tập phim, nguồn tư liệu và các mốc duyệt. Dùng trước khi làm việc. Không gọi mô hình bên ngoài.',inputSchema:toolSchema(),annotations:{readOnlyHint:true}},
+ {name:'studio_start_episode',description:'Chỉ dùng khi chủ Xưởng yêu cầu bắt đầu/chạy tập và chọn thời lượng, chế độ duyệt trong chat. Đọc project revision trước. Đổi thời lượng lưu lịch sử và mở lại từ Điều hành; từ chối nếu có claim đang chạy. Không dùng để tự vượt mốc duyệt hoặc đổi lựa chọn của chủ dự án.',inputSchema:toolSchema({episode_id:{type:'string'},target_minutes:{type:'integer',minimum:1,maximum:240},auto_approve:{type:'boolean'},expected_revision:{type:'integer',minimum:0}}),annotations:{readOnlyHint:false,destructiveHint:false}},
  {name:'studio_list_tasks',description:'Liệt kê đầu việc đang chờ Codex, đang chạy và đã nộp. Nhận việc do chủ dự án giao hoặc do chế độ tự động đã được chủ dự án bật.',inputSchema:toolSchema({episode_id:{type:'string'}},[]),annotations:{readOnlyHint:true}},
- {name:'studio_get_task',description:'Đọc gói đầu việc, instruction chuyên môn, ngữ cảnh, nguồn và JSON schema đầu ra.',inputSchema:toolSchema({task_id:taskId}),annotations:{readOnlyHint:true}},
+ {name:'studio_get_task',description:'Đọc gói đầu việc, kỹ năng theo vai trò, rubric tự rà soát, ngữ cảnh, nguồn và hợp đồng đầu ra có phiên bản.',inputSchema:toolSchema({task_id:taskId}),annotations:{readOnlyHint:true}},
  {name:'studio_claim_task',description:'Nhận đầu việc, làm nhân vật tương ứng bắt đầu trạng thái đang xử lý. Trả claimToken và lease 15 phút.',inputSchema:toolSchema({task_id:taskId}),annotations:{readOnlyHint:false,destructiveHint:false}},
  {name:'studio_report_progress',description:'Cập nhật tiến độ ngắn và gia hạn phiên nhận việc. Nêu việc đã xong và tiếp theo, không gửi suy luận nội bộ. Gọi ít nhất mỗi 10 phút khi làm.',inputSchema:toolSchema({task_id:taskId,claim_token:claimToken,message:{type:'string',maxLength:1200}}),annotations:{readOnlyHint:false,destructiveHint:false}},
  {name:'studio_read_resource',description:'Đọc tệp thật từ thư viện. Ảnh trả bằng image content, TXT/MD trả văn bản, PDF/tệp khác trả tài nguyên nhị phân. Mỗi lượt tối đa 5 MB.',inputSchema:toolSchema({resource_id:{type:'string'}}),annotations:{readOnlyHint:true}},
  {name:'studio_save_artifact',description:'Đồng bộ file Codex tạo về Xưởng, tối đa 1 MB mỗi file; encoding utf8 cho văn bản, base64 cho PDF/ảnh. Gọi tuần tự từng file, sau đó nộp kết quả. Ảnh ChatGPT 2×2 có thể kèm storyboard_shot_ids để gắn 1–4 ô vào shot.',inputSchema:toolSchema({task_id:taskId,claim_token:claimToken,filename:{type:'string'},mime:{type:'string',enum:['text/html','text/markdown','text/plain','text/csv','application/json','application/pdf','image/png','image/jpeg','image/webp']},encoding:{type:'string',enum:['utf8','base64']},content:{type:'string'},storyboard_shot_ids:{type:'array',items:{type:'string'},minItems:1,maxItems:4,description:'Designer: ID shot theo ô trên trái, trên phải, dưới trái, dưới phải của ảnh ChatGPT 2×2. Đồng bộ vào storyboard khi nộp kết quả.'}},['task_id','claim_token','filename','mime','encoding','content']),annotations:{readOnlyHint:false,destructiveHint:false}},
- {name:'studio_submit_result',description:'Nộp tài liệu theo schema. Máy chủ áp dụng chế độ duyệt của tập. Nếu awaitingHumanReview=true thì dừng; nếu workflow.autoApprove=true và có nextTask thì đọc, nhận và tiếp tục vai trò kế tiếp. Từ chối đầu vào đã đổi và ID nguồn không hợp lệ.',inputSchema:toolSchema({task_id:taskId,claim_token:claimToken,output:outputSchema}),annotations:{readOnlyHint:false,destructiveHint:false}},
+ {name:'studio_submit_result',description:'Nộp tài liệu, production và self-review theo gói task. Nếu tool còn schema cũ, dùng block valley-production trong content. Lỗi quality có vị trí và hướng sửa. Máy chủ áp dụng chế độ duyệt của tập. Nếu awaitingHumanReview=true thì dừng; nếu workflow.autoApprove=true và có nextTask thì đọc, nhận và tiếp tục vai trò kế tiếp. Từ chối đầu vào đã đổi và ID nguồn không hợp lệ.',inputSchema:toolSchema({task_id:taskId,claim_token:claimToken,output:outputSchema}),annotations:{readOnlyHint:false,destructiveHint:false}},
  {name:'studio_fail_task',description:'Báo không thể hoàn thành kèm lý do cụ thể, giữ nguyên các kết quả trước đó.',inputSchema:toolSchema({task_id:taskId,claim_token:claimToken,message:{type:'string'}}),annotations:{readOnlyHint:false,destructiveHint:false}}
 ];
 export async function handleMcp(request,env){
@@ -22,7 +23,7 @@ export async function handleMcp(request,env){
  const error=(code,message)=>json({jsonrpc:'2.0',id:rpc.id??null,error:{code,message}});
  if(rpc.jsonrpc!=='2.0'||typeof rpc.method!=='string')return error(-32600,'Invalid JSON-RPC request');
  if(rpc.method==='server/discover')return reply({supportedVersions:MCP_VERSIONS,capabilities:{tools:{}}});
- if(rpc.method==='initialize')return reply({protocolVersion:MCP_VERSIONS.includes(rpc.params?.protocolVersion)?rpc.params.protocolVersion:MCP_VERSIONS[0],capabilities:{tools:{}},serverInfo:{name:'valley-chibi-studio',version:'2.0.0'},instructions:'Codex thực hiện tác vụ do chủ dự án giao. Xưởng chỉ lưu và đồng bộ. Không gọi API mô hình. Đọc chế độ duyệt của tập; sau khi nộp, tiếp tục nextTask nếu workflow.autoApprove=true, dừng khi awaitingHumanReview=true hoặc hoàn tất. Chỉ chủ dự án bật/tắt chế độ duyệt trong Xưởng.'});
+ if(rpc.method==='initialize')return reply({protocolVersion:MCP_VERSIONS.includes(rpc.params?.protocolVersion)?rpc.params.protocolVersion:MCP_VERSIONS[0],capabilities:{tools:{}},serverInfo:{name:'valley-chibi-studio',version:'2.1.0'},instructions:'Codex thực hiện tác vụ do chủ dự án giao. Xưởng chỉ lưu và đồng bộ. Không gọi API mô hình. Đọc chế độ duyệt của tập; sau khi nộp, tiếp tục nextTask nếu workflow.autoApprove=true, dừng khi awaitingHumanReview=true hoặc hoàn tất. Chỉ thay chế độ theo lựa chọn rõ của chủ dự án; studio_start_episode dành cho yêu cầu bắt đầu của chủ Xưởng, không dùng để tự vượt mốc duyệt.'});
  if(rpc.method.startsWith('notifications/')&&rpc.id===undefined)return new Response(null,{status:202});
  if(rpc.method==='ping')return reply({});
  if(rpc.method==='tools/list')return reply({tools:env.MCP_OAUTH?MCP_TOOLS.map(t=>({...t,securitySchemes:[{type:'oauth2',scopes:['studio:access']}],_meta:{securitySchemes:[{type:'oauth2',scopes:['studio:access']}]}})):MCP_TOOLS});
@@ -36,6 +37,7 @@ export async function handleMcp(request,env){
   let result;
   switch(name){
   case 'studio_get_project':{const data=await readState(env,owner);result={...data,executionMode:'codex',externalModelCalls:false};break;}
+  case 'studio_start_episode':result=await startEpisode(env,owner,{episodeId:args.episode_id,targetMinutes:args.target_minutes,autoApprove:args.auto_approve,expectedRevision:args.expected_revision});break;
   case 'studio_list_tasks':result={tasks:await listTasks(env,owner,args.episode_id)};break;
   case 'studio_get_task':result=await getTask(env,owner,args.task_id);break;
   case 'studio_claim_task':result=await claimTask(env,owner,args.task_id);break;
@@ -46,5 +48,5 @@ export async function handleMcp(request,env){
   case 'studio_fail_task':result=await closeTask(env,owner,args.task_id,args.claim_token,'error',args.message);break;
   }
   return reply({content:[{type:'text',text:JSON.stringify(result)}]});
- }catch(e){return reply({content:[{type:'text',text:e.status?e.message:'Không thể đồng bộ tác vụ. Thử lại sau.'}],isError:true});}
+ }catch(e){return reply({content:[{type:'text',text:e.quality?JSON.stringify({error:e.message,quality:e.quality}):e.status?e.message:'Không thể đồng bộ tác vụ. Thử lại sau.'}],isError:true});}
 }

@@ -79,6 +79,12 @@ Năm vai trò: Điều hành → Sáng tạo → Biên kịch → Quay phim → 
 - Tập mẫu có 6 cảnh, 24 shot, 480 giây mục tiêu dựng. Nội dung mẫu được gắn nhãn riêng.
 - Đăng nhập Sites, D1 cho bản ghi, KV theo tài khoản ở bản Cloudflare Free (R2 ở bản Sites); JSON sao lưu không chứa file nhị phân.
 
+## Quy trình chuyên môn 1.0
+
+Chọn **Chạy quy trình** để đặt phút mục tiêu và chế độ duyệt, rồi giao đầu việc cho phiên Codex đã kết nối. Mỗi bước nhận kỹ năng chuyên môn, hợp đồng dữ liệu riêng và rubric tự rà soát. Server kiểm tra concept, beat map, ID cảnh/shot, file và self-review trước khi tiếp nhận; lỗi trả vị trí và hướng sửa, được giữ qua handoff. Giao diện hiển thị bàn giao có cấu trúc và báo cáo kiểm tra.
+
+[Hướng dẫn vận hành](docs/PRODUCTION_WORKFLOW.vi.md) giải thích công cụ owner `studio_start_episode`, tương thích MCP cũ qua block `valley-production`, migration và giới hạn. Các báo cáo là self-review của Codex; server không xác minh thay việc xem ảnh hoặc khảo sát hiện trường.
+
 ## Thời lượng tập phim và tự động duyệt
 
 Trong **Brief tập phim**, nhập **Thời lượng video mục tiêu · phút**, ví dụ `30`. Mỗi tập lưu riêng `targetMinutes` (số nguyên 1–240); tập mới mặc định 30 phút, tập mẫu và dữ liệu cũ giữ mục tiêu 8 phút. Giao diện và production book hiển thị riêng mục tiêu và tổng thời lượng shot đã phân bổ. Sửa thời lượng khi đã có kết quả lưu bản cũ vào lịch sử và mở lại quy trình từ định hướng.
@@ -111,6 +117,7 @@ Tự động chuyển bước cần một phiên Codex/ChatGPT đang làm việc
 
 | Công cụ | Mục đích |
 |---|---|
+| `studio_start_episode` | Chủ Xưởng yêu cầu bắt đầu với phút mục tiêu, chế độ duyệt và revision |
 | `studio_get_project` | Đọc dự án và tiến độ |
 | `studio_list_tasks` | Xem các đầu việc |
 | `studio_get_task` | Lấy instruction, snapshot, nguồn và schema |
@@ -176,7 +183,7 @@ Lệnh này cần đích chưa tồn tại, ở ngoài checkout. Không chép Gi
 
 ## Nghiên cứu và hướng mở rộng
 
-Đối chiếu mới: [Nâng cấp Agents từ OpenMontage](docs/OPENMONTAGE_RESEARCH.vi.md), ngày 12/11/2026. Báo cáo đề xuất skill theo vai trò, hợp đồng đầu ra, review trước tự động duyệt, phân tích reference có chứng cứ, continuity và checkpoint theo cảnh. Đây là lộ trình nghiên cứu; các nâng cấp được đề xuất chưa được triển khai trong ứng dụng.
+Đối chiếu mới: [Nâng cấp Agents từ OpenMontage](docs/OPENMONTAGE_RESEARCH.vi.md), ngày 12/11/2026. Báo cáo đề xuất skill theo vai trò, hợp đồng đầu ra, review trước tự động duyệt, phân tích reference có chứng cứ, continuity và checkpoint theo cảnh. Đợt 1 đã được triển khai ở bản 2.1: skill, hợp đồng và self-review; các đợt tiếp theo vẫn là đề xuất.
 
 Repo được cung cấp [awesome-ai-agents-2026](https://github.com/caramaschiHG/awesome-ai-agents-2026) là danh mục công cụ, không phải mã nguồn một xưởng phim. Tài liệu upstream của [LangGraph](https://github.com/langchain-ai/langgraph) và [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) được đối chiếu để đánh giá workflow, handoff và người duyệt. Bản này không tích hợp các SDK đó hoặc gọi API của chúng; Codex là nơi thực hiện nội dung, MCP là kênh đồng bộ.
 

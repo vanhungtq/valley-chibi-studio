@@ -1,0 +1,16 @@
+// Valid content fixtures for orchestration tests; validation tests submit raw payloads.
+export function reviewedOutput(output,stage,{targetMinutes=8,scenes=output.scenes,artifacts=[]}={}){
+ const result=structuredClone(output);
+ if(result.production)return result;
+ const checks=['grounding','feasibility','continuity',['scope','differentiation','story_progression','coverage','document_integrity'][stage]].map(id=>({id,status:'pass',evidence:'Fixture đã đối chiếu '+id+' theo dữ liệu của bài kiểm tra.'}));
+ const roleData=[
+  {goal:'Một ngày đầu ở căn nhà mới',targetMinutes,scope:['Dọn phòng chính và nấu bữa tối'],constraints:['Công việc trong tầm với'],assumptions:['Chưa có khảo sát hiện trường'],facts:[],questions:['Cần chốt ngày quay'],acceptanceCriteria:['Có khởi đầu và kết thúc','Giữ dữ kiện có nguồn','Đủ thời lượng và ID'],handoff:'Phát triển concept từ phạm vi này.'},
+  {concepts:[{id:'hands',title:'Đôi bàn tay',logline:'Căn nhà ấm lên từ lao động',difference:'Dùng hành động riêng của hai chị em',hook:'Tay mở cửa',motif:'Đôi bàn tay',arc:['Khám phá','Cùng làm','Thuộc về'],ending:'Bữa cơm đầu'},{id:'door',title:'Cánh cửa',logline:'Một ngưỡng cửa mở đời sống mới',difference:'Nhịp kể qua các lần mở cửa',hook:'Âm thanh bản lề',motif:'Cánh cửa',arc:['Bỡ ngỡ','Chăm chút','An yên'],ending:'Nhà lên đèn'}],selectedConceptId:'hands',selectionReason:'Phù hợp công việc và hai nhân vật',styleProfile:{palette:['xanh rêu','gỗ nâu'],camera:'Máy tĩnh có mục đích',lighting:'Ánh sáng tự nhiên',sound:'Âm thanh lao động',wardrobe:'Theo tư liệu được xác nhận',avoid:['Không dựng thao tác không có thật']},props:['Khăn lau'],assumptions:['Đạo cụ cần chủ dự án xác nhận'],handoff:'Viết hành động theo motif đôi bàn tay.'},
+  {beatMap:scenes.map((s,i)=>({id:'beat-'+i,title:s.title,purpose:s.emotion||'Tiến triển hành động',sceneIds:[s.id],seconds:s.shots.reduce((sum,sh)=>sum+sh.seconds,0)})),continuity:[],assumptions:['Ngày quay chờ xác nhận'],handoff:'Thiết kế coverage theo các ID này.'},
+  {shotDesigns:scenes.flatMap(s=>s.shots.map(sh=>({shotId:sh.id,purpose:sh.action,composition:'Chủ thể trong bối cảnh đã chọn',focus:'Điểm nét theo hành động',axis:'Giữ trục của cảnh',continuity:'Giữ trạng thái đạo cụ trước/sau',coverage:'other'}))),soundPlan:scenes.map(s=>({sceneId:s.id,ambience:s.sound,actionSounds:['Âm thanh thao tác'],method:'Thu đồng bộ và wild track',roomToneSeconds:30})),equipment:['Máy quay và tripod'],assumptions:['Ống kính cần xác nhận'],handoff:'Dàn hồ sơ với đúng shot và nguồn.'},
+  {deliverables:artifacts.filter(a=>['text/html','application/pdf'].includes(a.mime)).slice(0,1).map(a=>({artifactId:a.id,kind:'production_book',label:a.name})),storyboardCoverage:scenes.flatMap(s=>s.shots.map(sh=>({shotId:sh.id,status:'missing',note:'Fixture chưa yêu cầu ảnh storyboard.'}))),checklist:['Đối chiếu dữ liệu trước khi xuất'],assumptions:['Storyboard chưa được kiểm tra nội dung trong fixture'],handoff:'Hồ sơ kiểm thử được lưu đúng ID.'}
+ ][stage];
+ if(stage===4){checks.find(c=>c.id==='document_integrity').status='warning';result.missing=[...result.missing,'Storyboard fixture còn thiếu.'];}
+ result.production={schemaVersion:'1.0',stage,data:roleData,review:{verdict:'passed',round:1,checks,findings:[]}};
+ return result;
+}

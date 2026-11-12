@@ -7,7 +7,7 @@ import {seedState,SCENES} from '../public/data.js';
 import {shotCsv,projectJson} from '../public/exports.js';
 import {esc,storyboardSvg} from '../public/ui.js';
 
-const sql=(await readFile(new URL('../drizzle/0000_studio.sql',import.meta.url),'utf8'))+'\n'+await readFile(new URL('../drizzle/0001_codex_tasks.sql',import.meta.url),'utf8');
+const sql=(await readFile(new URL('../drizzle/0000_studio.sql',import.meta.url),'utf8'))+'\n'+await readFile(new URL('../drizzle/0001_codex_tasks.sql',import.meta.url),'utf8')+'\n'+await readFile(new URL('../drizzle/0002_production_review.sql',import.meta.url),'utf8');
 function fixture(){
  const sqlite=new DatabaseSync(':memory:');sqlite.exec(sql);
  const DB={prepare(sql){return {bind(...args){return {async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){const out=sqlite.prepare(sql).run(...args);return {meta:{changes:Number(out.changes)}};}};}};}};

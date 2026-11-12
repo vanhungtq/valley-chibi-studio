@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {handleApi,sampleOutput} from '../worker/api.js';
 import {handleMcp} from '../worker/mcp.js';
 import {seedState} from '../public/data.js';
+import {reviewedOutput} from './production-fixtures.mjs';
 
 function setup(){
  const db=new DatabaseSync(':memory:');
@@ -14,10 +15,11 @@ function setup(){
  const headers=owner=>owner?{'oai-authenticated-user-id':owner,'content-type':'application/json'}:{'content-type':'application/json'};
  async function api(path,method='GET',body,owner='alice'){const r=await handleApi(new Request('https://studio.test'+path,{method,headers:headers(owner),body:body?JSON.stringify(body):undefined}),env);return {status:r.status,body:await r.json()};}
  async function rpc(method,params={},owner='alice'){const r=await handleMcp(new Request('https://studio.test/mcp',{method:'POST',headers:headers(owner),body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),env);return await r.json();}
- async function tool(name,args={},owner='alice'){const r=await rpc('tools/call',{name,arguments:args},owner);const result=r.result;let data;try{data=JSON.parse(result.content[0].text);}catch{data=result.content?.[0]?.text;}return {error:!!result.isError,data,content:result.content};}
- return {db,env,files,api,rpc,tool};
+ async function rawTool(name,args={},owner='alice'){const r=await rpc('tools/call',{name,arguments:args},owner);const result=r.result;let data;try{data=JSON.parse(result.content[0].text);}catch{data=result.content?.[0]?.text;}return {error:!!result.isError,data,content:result.content};}
+ async function tool(name,args={},owner='alice'){if(name==='studio_submit_result'){const row=db.prepare('SELECT * FROM codex_tasks WHERE id = ? AND owner = ?').get(args.task_id,owner);if(row){const context=JSON.parse(row.input_snapshot);args={...args,output:reviewedOutput(args.output,row.stage,{targetMinutes:context.episode.targetMinutes||8,scenes:[2,3].includes(row.stage)?args.output.scenes:context.episode.scenes,artifacts:JSON.parse(row.artifacts)})};}}return rawTool(name,args,owner);}
+ return {db,env,files,api,rpc,tool,rawTool};
 }
-const migrations=(await readFile(new URL('../drizzle/0000_studio.sql',import.meta.url),'utf8'))+'\n'+await readFile(new URL('../drizzle/0001_codex_tasks.sql',import.meta.url),'utf8');
+const migrations=(await readFile(new URL('../drizzle/0000_studio.sql',import.meta.url),'utf8'))+'\n'+await readFile(new URL('../drizzle/0001_codex_tasks.sql',import.meta.url),'utf8')+'\n'+await readFile(new URL('../drizzle/0002_production_review.sql',import.meta.url),'utf8');
 async function initialized(){const x=setup();x.db.exec(migrations);const s=seedState();const r=await x.api('/api/state','PUT',{state:s,revision:0});assert.equal(r.status,200);return x;}
 async function queued(x){const q=await x.api('/api/tasks','POST',{episodeId:'ep-01'});assert.equal(q.status,201,JSON.stringify(q.body));return q.body.task;}
 async function claimed(x,id){const r=await x.tool('studio_claim_task',{task_id:id});assert.equal(r.error,false,JSON.stringify(r.data));return r.data.claimToken;}
@@ -36,7 +38,7 @@ test('a 30-minute episode automatically completes all five roles with durable ap
   assert.equal(packet.context.episode.targetMinutes,30);assert.equal(packet.context.episode.targetSeconds,1800);assert.equal(packet.workflow.autoApprove,true);
   assert.match(packet.instructions,/nextTask/);
   const token=await claimed(x,task.id),output=sampleOutput(stage);
-  if([2,3].includes(stage))for(const scene of output.scenes){scene.image='';for(const shot of scene.shots)shot.seconds*=1800/480;}
+  if([2,3].includes(stage))for(const scene of output.scenes){scene.image='';for(const shot of scene.shots)shot.seconds=Math.round(shot.seconds*1800/480);}if([2,3].includes(stage)){const shots=output.scenes.flatMap(s=>s.shots);shots.at(-1).seconds+=1800-shots.reduce((sum,sh)=>sum+sh.seconds,0);}
   if(stage===4)assert.equal((await x.tool('studio_save_artifact',{task_id:task.id,claim_token:token,filename:'production-book.html',mime:'text/html',encoding:'utf8',content:'<!doctype html><title>30 phút</title><h1>Production book</h1>'})).error,false);
   const submitted=await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output});
   assert.equal(submitted.error,false,JSON.stringify(submitted.data));assert.equal(submitted.data.task.status,'approved');assert.equal(submitted.data.awaitingHumanReview,false);
@@ -132,7 +134,7 @@ test('automatic queuing cannot insert a next task after the owner turns it off',
  const e=(await x.api('/api/state')).body.state.episodes[0];assert.equal(e.stage,1);assert.deepEqual(e.approved,[0]);assert.equal(e.autoApprove,false);
 });
 
-test('MCP advertises discovery, nine tools, and no automatic approval tool',async()=>{const x=await initialized();const discover=await x.rpc('server/discover');assert.ok(discover.result.supportedVersions.includes('2026-07-28'));const tools=(await x.rpc('tools/list')).result.tools;assert.equal(tools.length,9);assert.ok(!tools.some(t=>/approve/.test(t.name)));assert.equal((await x.tool('studio_get_project',{},null)).error,true);});
+test('MCP advertises discovery, ten tools, and no automatic approval tool',async()=>{const x=await initialized();const discover=await x.rpc('server/discover');assert.ok(discover.result.supportedVersions.includes('2026-07-28'));const tools=(await x.rpc('tools/list')).result.tools;assert.equal(tools.length,10);assert.ok(!tools.some(t=>/approve/.test(t.name)));assert.equal((await x.tool('studio_get_project',{},null)).error,true);});
 test('queue only records work; does not start execution or make outbound model calls',async()=>{const x=await initialized();const fetch=globalThis.fetch;globalThis.fetch=()=>{throw new Error('Outbound requests forbidden');};try{const t=await queued(x);assert.equal(t.status,'queued');assert.equal(t.leaseUntil,null);const packet=await x.tool('studio_get_task',{task_id:t.id});assert.equal(packet.error,false);assert.match(packet.data.instructions,/Không gọi API mô hình/);assert.equal(packet.data.context.episode.id,'ep-01');assert.ok(packet.data.outputSchema);const cfg=(await x.api('/api/config')).body;assert.equal(cfg.externalModelCalls,false);assert.equal(cfg.executionMode,'codex');}finally{globalThis.fetch=fetch;}});
 test('queue is idempotent and tasks from another account cannot be read or claimed',async()=>{const x=await initialized();const a=await queued(x),b=await queued(x);assert.equal(a.id,b.id);assert.equal(x.db.prepare('SELECT count(*) AS n FROM codex_tasks').get().n,1);assert.equal((await x.tool('studio_get_task',{task_id:a.id},'bob')).error,true);assert.equal((await x.tool('studio_claim_task',{task_id:a.id},'bob')).error,true);assert.deepEqual((await x.api('/api/tasks','GET',undefined,'bob')).body.tasks,[]);});
 test('claimed task reports actual progress, uploads file, submits and waits for human review',async()=>{const x=await initialized();const t=await queued(x),token=await claimed(x,t.id);assert.equal((await x.api('/api/tasks')).body.tasks[0].status,'running');const p=await x.tool('studio_report_progress',{task_id:t.id,claim_token:token,message:'Đã rà brief. Đang đối chiếu nguồn.'});assert.equal(p.error,false);assert.match(p.data.progress,/Đã rà brief/);
@@ -156,6 +158,7 @@ test('Designer saves ChatGPT 2x2 atlas, binds panels on submission and waits for
  assert.equal((await x.tool('studio_save_artifact',{...artifact,storyboard_shot_ids:['invented']})).error,true);
  const a=await x.tool('studio_save_artifact',artifact);assert.equal(a.error,false);assert.equal((await x.tool('studio_save_artifact',artifact)).data.id,a.data.id);
  assert.equal((await x.api('/api/state')).body.state.episodes[0].storyboards,undefined);
+ await x.tool('studio_save_artifact',{task_id:t.id,claim_token:token,filename:'production.html',mime:'text/html',encoding:'utf8',content:'<!doctype html><h1>Hồ sơ kiểm thử</h1>'});
  const result=await x.tool('studio_submit_result',{task_id:t.id,claim_token:token,output:sampleOutput(4)});assert.equal(result.error,false,JSON.stringify(result.data));
  const saved=(await x.api('/api/state')).body,ep=saved.state.episodes[0];assert.equal(ep.storyboards.S01.panel,0);assert.equal(ep.storyboards.S04.panel,3);assert.equal(ep.stage,4);assert.deepEqual(ep.approved,[0,1,2,3]);assert.equal(saved.state.assets[0].category,'storyboard');assert.equal(saved.state.assets[0].id,a.data.id);
  assert.equal((await x.api('/api/state','PUT',saved)).status,200);assert.equal((await x.tool('studio_read_resource',{resource_id:a.data.id})).content[1].type,'image');
@@ -223,4 +226,90 @@ test('task submission atomically initializes state when the project has not been
  const result=await x.tool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)});
  assert.equal(result.error,false,JSON.stringify(result.data));assert.equal(result.data.revision,1);
  assert.equal((await x.api('/api/state')).body.state.episodes[0].outputs[0].taskId,task.id);
+});
+
+test('new task packets include versioned skills, stage contracts and a review rubric',async()=>{
+ const x=await initialized(),task=await queued(x),packet=(await x.rawTool('studio_get_task',{task_id:task.id})).data;
+ assert.equal(packet.productionPolicy.required,true);assert.equal(packet.productionPolicy.workflowVersion,'rural-documentary/1.0');
+ assert.deepEqual(packet.skills.map(s=>s.id),['rural-observation','ceo','reviewer']);assert.equal(packet.reviewRubric.length,4);
+ assert.equal(packet.productionSchema.properties.stage.const,0);assert.ok(packet.outputSchema.required.includes('production'));
+ assert.match(packet.instructions,/valley-production/);assert.ok(!packet.instructions.includes('SPAWN DIRECTOR'));
+});
+
+test('missing production is rejected durably and the identical retry does not count twice',async()=>{
+ const x=await initialized(),task=await queued(x),token=await claimed(x,task.id),before=(await x.api('/api/state')).body;
+ const args={task_id:task.id,claim_token:token,output:sampleOutput(0)};
+ const first=await x.rawTool('studio_submit_result',args);assert.equal(first.error,true);assert.equal(first.data.quality.issues[0].field,'production');assert.equal(first.data.quality.attempts,1);
+ const retry=await x.rawTool('studio_submit_result',args);assert.equal(retry.data.quality.attempts,1);
+ const taskAfter=(await x.api('/api/tasks')).body.tasks[0];assert.equal(taskAfter.status,'running');assert.equal(taskAfter.review.verdict,'needs_revision');
+ assert.equal((await x.api('/api/state')).body.revision,before.revision);assert.equal((await x.api('/api/state')).body.state.episodes[0].outputs[0],undefined);
+});
+
+test('cached MCP schemas can submit structured production through the content fence',async()=>{
+ const x=await initialized(),on=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true}),task=on.body.nextTask,token=await claimed(x,task.id);
+ const output=reviewedOutput(sampleOutput(0),0),production=output.production;delete output.production;
+ output.content+='\n\n```valley-production\n'+JSON.stringify(production)+'\n```';
+ const accepted=await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output});assert.equal(accepted.error,false,JSON.stringify(accepted.data));assert.equal(accepted.data.task.status,'approved');assert.equal(accepted.data.nextTask.stage,1);
+ const saved=(await x.api('/api/state')).body.state.episodes[0].outputs[0];assert.equal(saved.production.schemaVersion,'1.0');assert.equal(saved.quality.reviewer,'codex_self_review');assert.ok(!saved.content.includes('valley-production'));
+ assert.equal((await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output})).data.alreadySubmitted,true);
+});
+
+test('unresolved critical findings block auto approval; a repaired result advances with the same claim',async()=>{
+ const x=await initialized(),on=await x.api('/api/workflow','POST',{episodeId:'ep-01',autoApprove:true}),task=on.body.nextTask,token=await claimed(x,task.id),output=reviewedOutput(sampleOutput(0),0);
+ output.production.review.findings.push({id:'bad-wall',severity:'critical',field:'production.data.scope',description:'Trạng thái tường đang mâu thuẫn',proposedFix:'Tách hiện trạng chưa sơn khỏi ý tưởng sơn thử',resolved:false});
+ const failed=await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output});assert.equal(failed.error,true);assert.equal(failed.data.quality.verdict,'needs_revision');assert.equal((await x.api('/api/state')).body.state.episodes[0].stage,0);
+ output.production.review.round=2;output.production.review.findings[0].resolved=true;
+ const accepted=await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output});assert.equal(accepted.error,false);assert.equal(accepted.data.task.status,'approved');assert.equal(accepted.data.task.reviewAttempts,1);
+});
+
+test('stage validation rejects invented concept selection and requires every rubric check',async()=>{
+ const x=await initialized(),fresh=(await x.api('/api/state')).body;fresh.state.episodes[0].stage=1;fresh.state.episodes[0].approved=[0];await x.api('/api/state','PUT',fresh);
+ const task=await queued(x),token=await claimed(x,task.id),output=reviewedOutput(sampleOutput(1),1);output.production.data.selectedConceptId='does-not-exist';output.production.review.checks.pop();
+ const failed=await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output});assert.equal(failed.error,true);assert.ok(failed.data.quality.issues.some(i=>i.field==='production.data.selectedConceptId'));assert.ok(failed.data.quality.issues.some(i=>i.field==='production.review.checks'));
+});
+
+test('script beat timing and camera shot coverage are checked against actual scene IDs',async()=>{
+ for(const stage of [2,3]){
+  const x=await initialized(),fresh=(await x.api('/api/state')).body;fresh.state.episodes[0].stage=stage;fresh.state.episodes[0].approved=Array.from({length:stage},(_,i)=>i);await x.api('/api/state','PUT',fresh);
+  const task=await queued(x),token=await claimed(x,task.id),base=sampleOutput(stage);for(const scene of base.scenes)scene.image='';
+  const output=reviewedOutput(base,stage);
+  if(stage===2)output.production.data.beatMap[0].seconds+=10;else output.production.data.shotDesigns.pop();
+  const failed=await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output});assert.equal(failed.error,true);assert.match(failed.data.quality.issues[0].field,stage===2?/beatMap/:/shotDesigns/);
+  if(stage===3){const renamed=reviewedOutput(base,stage);renamed.scenes[0].shots[0].id='renamed';renamed.production.data.shotDesigns[0].shotId='renamed';const rejected=await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output:renamed});assert.equal(rejected.error,true);assert.ok(rejected.data.quality.issues.some(i=>i.field==='scenes.SC01.S01'));}
+  const repaired=reviewedOutput(base,stage);assert.equal((await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output:repaired})).error,false);
+ }
+});
+
+test('review rejection cannot overwrite a handed-off task at the update boundary',async()=>{
+ const x=await initialized(),task=await queued(x),token=await claimed(x,task.id),prepare=x.env.DB.prepare.bind(x.env.DB);
+ x.env.DB.prepare=sql=>{const statement=prepare(sql);if(!sql.startsWith('UPDATE codex_tasks SET review ='))return statement;return {bind(...args){const bound=statement.bind(...args);return {...bound,async run(){x.env.DB.prepare=prepare;assert.equal((await x.api('/api/tasks/'+task.id+'/handoff','POST',{})).status,200);return bound.run();}};}};};
+ const failed=await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)});assert.equal(failed.error,true);
+ const row=(await x.api('/api/tasks')).body.tasks[0];assert.equal(row.status,'queued');assert.equal(row.reviewAttempts,0);assert.deepEqual(row.review,{});
+});
+
+test('legacy queued tasks remain claimable and accept their old output contract',async()=>{
+ const x=await initialized(),task=await queued(x),row=x.db.prepare('SELECT input_snapshot FROM codex_tasks WHERE id = ?').get(task.id),context=JSON.parse(row.input_snapshot);delete context.production;
+ const keys=new Set();const collect=value=>{if(value&&typeof value==='object'){for(const [key,item] of Object.entries(value)){keys.add(key);collect(item);}}};collect(context);
+ const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(context,[...keys].sort()))))).map(n=>n.toString(16).padStart(2,'0')).join('');
+ x.db.prepare('UPDATE codex_tasks SET input_snapshot = ?, input_digest = ? WHERE id = ?').run(JSON.stringify(context),hash,task.id);
+ const packet=(await x.rawTool('studio_get_task',{task_id:task.id})).data;assert.equal(packet.productionPolicy.required,false);
+ const token=await claimed(x,task.id),accepted=await x.rawTool('studio_submit_result',{task_id:task.id,claim_token:token,output:sampleOutput(0)});assert.equal(accepted.error,false,JSON.stringify(accepted.data));
+ assert.equal((await x.api('/api/state')).body.state.episodes[0].outputs[0].quality.verdict,'legacy');
+});
+
+test('explicit owner start sets thirty minutes and auto mode, preserving prior files in history',async()=>{
+ const x=await initialized(),old=await queued(x),token=await claimed(x,old.id);
+ await x.tool('studio_save_artifact',{task_id:old.id,claim_token:token,filename:'old.md',mime:'text/markdown',encoding:'utf8',content:'Bản trước được giữ lại.'});
+ assert.equal((await x.tool('studio_submit_result',{task_id:old.id,claim_token:token,output:sampleOutput(0)})).error,false);
+ const before=(await x.api('/api/state')).body;
+ const started=await x.rawTool('studio_start_episode',{episode_id:'ep-01',target_minutes:30,auto_approve:true,expected_revision:before.revision});assert.equal(started.error,false,JSON.stringify(started.data));assert.equal(started.data.episode.targetMinutes,30);assert.equal(started.data.episode.autoApprove,true);assert.equal(started.data.task.stage,0);
+ const e=(await x.api('/api/state')).body.state.episodes[0];assert.equal(e.outputs[0],undefined);assert.equal(e.versions.at(-1).snapshot.outputs[0].taskId,old.id);assert.equal(e.versions.at(-1).snapshot.outputs[0].artifacts.length,1);assert.equal(x.files.size,1);
+ assert.equal((await x.rawTool('studio_start_episode',{episode_id:'ep-01',target_minutes:30,auto_approve:true,expected_revision:before.revision})).error,true);
+});
+
+test('a live claim winning the start race prevents duration changes and retains all owner settings',async()=>{
+ const x=await initialized(),task=await queued(x),before=(await x.api('/api/state')).body,batch=x.env.DB.batch;
+ x.env.DB.batch=async statements=>{x.env.DB.batch=batch;await claimed(x,task.id);return batch(statements);};
+ const start=await x.api('/api/episodes/start','POST',{episodeId:'ep-01',targetMinutes:30,autoApprove:true,expectedRevision:before.revision});assert.equal(start.status,409);
+ const after=(await x.api('/api/state')).body;assert.deepEqual(after,before);assert.equal((await x.api('/api/tasks')).body.tasks[0].status,'running');
 });

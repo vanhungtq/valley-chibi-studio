@@ -1,0 +1,276 @@
+{
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "stage": {
+      "type": "integer",
+      "const": 3
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "shotDesigns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "shotId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "purpose": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "composition": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "focus": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "axis": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "continuity": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "coverage": {
+                "type": "string",
+                "enum": [
+                  "wide",
+                  "medium",
+                  "detail",
+                  "insert",
+                  "transition",
+                  "hero",
+                  "other"
+                ]
+              }
+            },
+            "required": [
+              "shotId",
+              "purpose",
+              "composition",
+              "focus",
+              "axis",
+              "continuity",
+              "coverage"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 3200
+        },
+        "soundPlan": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sceneId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "ambience": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "actionSounds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 12000
+                },
+                "minItems": 0,
+                "maxItems": 200
+              },
+              "method": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "roomToneSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 600
+              }
+            },
+            "required": [
+              "sceneId",
+              "ambience",
+              "actionSounds",
+              "method",
+              "roomToneSeconds"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 40
+        },
+        "equipment": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12000
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12000
+          },
+          "minItems": 0,
+          "maxItems": 200
+        },
+        "handoff": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12000
+        }
+      },
+      "required": [
+        "shotDesigns",
+        "soundPlan",
+        "equipment",
+        "assumptions",
+        "handoff"
+      ],
+      "additionalProperties": false
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "needs_revision",
+            "needs_input"
+          ]
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "warning",
+                  "blocked"
+                ]
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "evidence"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 12
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "critical",
+                  "warning"
+                ]
+              },
+              "field": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "proposedFix": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "resolved": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "severity",
+              "field",
+              "description",
+              "proposedFix",
+              "resolved"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "verdict",
+        "round",
+        "checks",
+        "findings"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "stage",
+    "data",
+    "review"
+  ],
+  "additionalProperties": false
+}
