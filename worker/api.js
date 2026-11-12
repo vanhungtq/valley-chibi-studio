@@ -9,7 +9,7 @@ export const fail=(status,message)=>Object.assign(new Error(message),{status});
 const userOf=r=>r.headers.get('oai-authenticated-user-id');
 const clean=s=>String(s||'').slice(0,10000);
 const MAX_FILE=30*1024*1024;
-const mimeTypes=new Set(['image/jpeg','image/png','image/webp','image/avif','application/pdf','text/plain','text/markdown','video/mp4','video/quicktime']);
+export const mimeTypes=new Set(['image/jpeg','image/png','image/webp','image/avif','application/pdf','text/plain','text/markdown','text/csv','application/json','application/zip','video/mp4','video/quicktime']);
 const isObj=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
 
 export async function readState(env,owner){
@@ -124,7 +124,7 @@ export async function handleApi(request,env){
   if(!file||typeof file==='string')throw fail(400,'Chưa có tệp tải lên.');
   if(file.size>maxFile||!file.size)throw fail(413,'Tệp phải lớn hơn 0 và không quá '+limitMiB+' MiB.');
   let mime=file.type;if(!mime&&/\.(md|txt)$/i.test(file.name))mime=file.name.endsWith('.md')?'text/markdown':'text/plain';
-  if(!mimeTypes.has(mime))throw fail(415,'Hỗ trợ JPG, PNG, WebP, AVIF, PDF, TXT, MD và video MP4/MOV.');
+  if(!mimeTypes.has(mime))throw fail(415,'Hỗ trợ ảnh, PDF, TXT, MD, CSV, JSON, ZIP và video MP4/MOV.');
   const id=crypto.randomUUID(),key='users/'+encodeURIComponent(owner)+'/'+id;
   await env.BUCKET.put(key,file.stream(),{httpMetadata:{contentType:mime},customMetadata:{owner,name:file.name.slice(0,240)}});
   return json({id,key,name:file.name.slice(0,240),mime,size:file.size,url:'/api/files/'+id},201);
@@ -140,7 +140,7 @@ export async function handleApi(request,env){
    const partial=request.headers.has('range')&&object.range&&Number.isFinite(object.range.offset)&&Number.isFinite(object.range.length)&&Number.isFinite(object.size);
    if(partial){headers.set('content-range',`bytes ${object.range.offset}-${object.range.offset+object.range.length-1}/${object.size}`);headers.set('content-length',String(object.range.length));}
    else if(Number.isFinite(object.size))headers.set('content-length',String(object.size));
-   headers.set('content-disposition',(object.httpMetadata?.contentType==='text/html'?'attachment':'inline')+'; filename*=UTF-8\'\''+encodeURIComponent(object.customMetadata?.name||'resource'));
+   headers.set('content-disposition',(['text/html','application/zip','text/csv','application/json'].includes(object.httpMetadata?.contentType)?'attachment':'inline')+'; filename*=UTF-8\'\''+encodeURIComponent(object.customMetadata?.name||'resource'));
    if(object.httpMetadata?.contentType==='text/html')headers.set('content-security-policy',"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:");
    return new Response(object.body,{headers,status:partial?206:200});
   }
