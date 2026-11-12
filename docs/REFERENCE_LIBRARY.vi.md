@@ -16,6 +16,16 @@ Các cột hữu ích: `shot_id`, `scene_id`, `scene_type`, `timecode` (hoặc `
 
 Giới hạn mỗi gói: ZIP 100 MiB, tổng CSV/ảnh sau giải nén 200 MiB, 300 shot, ảnh gốc tối đa 20 MiB, CSV tối đa 1 MiB. Thư viện hiện có tối đa 600 tài nguyên. Ảnh lớn được tối ưu để Codex đọc, giữ bản gốc trên máy. ZIP mã hóa/ZIP64, đường dẫn vượt thư mục và tệp bị hỏng bị từ chối. App lưu đủ ảnh/CSV đã nhập; không cần tải nguyên ZIP lên KV.
 
+### ZIP lớn được chủ dự án cung cấp trực tiếp cho Codex
+
+Khi có link tải được phép truy cập, Codex có thể tải ZIP vào workspace, giải nén an toàn và tạo ảnh reference nhẹ. Không cần truyền ZIP gốc qua MCP hay nâng giới hạn trình duyệt. Giữ ID, tên file gốc, timecode và provenance; đọc đủ ảnh bằng bảng ảnh rồi mở ảnh lớn khi cần. Thu nhỏ/nén giảm byte truyền; không bảo đảm giảm token tương ứng.
+
+Tải ảnh nhẹ vào Library với category `reference`, phạm vi toàn dự án. Có thể cấp tối đa 100 quyền tải một lần qua giao thức `valley-library-batch/1` được `studio_get_project.libraryBatch` công bố; vẫn PUT và kiểm tra từng file bằng token riêng. Giao thức không chuyển byte qua nội dung chat.
+
+Sau khi ảnh đã lưu thật, tạo file JSON `{protocol:"valley-reference-profile/1",profile:{...}}` theo schema hồ sơ hiện có, với imageId trỏ đúng ảnh trong Library. Tải JSON vào Library, dùng chung dự án (tối đa 1 MiB). Gọi `studio_reference_analysis(action="import",profile_resource_id,expected_revision)` để nhập và xếp hàng phân tích. Danh mục cũ dùng `studio_save_artifact`, namespace `reference-import:project`, claim rỗng, JSON/UTF-8; content gồm `protocol="valley-reference-import/1"`, `profile_resource_id`, `expected_revision`. Chỉ dùng khi project công bố giao thức. Thao tác chủ Xưởng không sửa tập, không duyệt hoặc tự claim task. Nhập lại cùng importHash không tạo thêm hồ sơ hay đầu việc đã tồn tại.
+
+Phân biệt CSV có start/end của shot với bảng ảnh chụp tại timestamp. Cột `seconds` có thể là vị trí trên timeline, không phải thời lượng. Không dùng khoảng cách hai ảnh để khẳng định thời lượng cú máy hoặc tổng thời lượng video khi nguồn không cung cấp điểm kết thúc.
+
 Sau khi nhập, hồ sơ hiển thị ảnh, shot, timecode và phân cảnh; bấm ảnh để xem lớn. Mở **Thông tin & phân loại** để đặt dạng video (Nấu ăn, Nông nghiệp, Cải tạo nhà…) và loại từng phân cảnh (Hái rau, Cuốc đất, Sơ chế…). Các loại có sẵn là gợi ý, có thể nhập thêm loại mới. Bộ lọc trên trang thư viện giúp tìm đúng dạng video hoặc phân cảnh.
 
 ## Codex phân tích và lưu kiến thức

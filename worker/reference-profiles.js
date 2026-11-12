@@ -3,6 +3,7 @@ import {readState,body,fail,json} from './api.js';
 import {filterReferenceRecord,referenceTags,referenceTaxonomy} from '../public/reference-catalog.js';
 
 export const REFERENCE_ANALYSIS_PROTOCOL='valley-reference-analysis/1';
+export const REFERENCE_IMPORT_PROTOCOL='valley-reference-import/1';
 const rpHash=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(value)))),b=>b.toString(16).padStart(2,'0')).join('');
 const rpSize=value=>new TextEncoder().encode(JSON.stringify(value)).length;
 const rpString=(value,max=4000)=>typeof value==='string'&&value.length<=max;
@@ -21,6 +22,23 @@ function rpValidate(profile,assets,owner){
 const rpSource=profile=>({title:profile.title,note:profile.note,url:profile.url,source:profile.source,videoTypes:profile.videoTypes,shots:profile.shots});
 async function rpRow(env,owner,id){const row=await env.DB.prepare('SELECT * FROM reference_profiles WHERE owner = ? AND id = ?').bind(owner,id).first();if(!row)throw fail(404,'Không tìm thấy hồ sơ video mẫu.');return row;}
 export async function readReferenceProfile(env,owner,id){const row=await rpRow(env,owner,id);return {profile:JSON.parse(row.data),revision:row.revision,sourceHash:row.source_hash};}
+export async function importLibraryReference(env,owner,args){
+ if(!env.MCP_OAUTH||env.MCP_IDENTITY?.id!==owner)throw fail(403,'Nhập hồ sơ cần MCP của chủ Xưởng.');
+ const loaded=await readState(env,owner);if(args.expected_revision!==loaded.revision)throw fail(409,'Đọc revision mới trước khi nhập hồ sơ.');
+ const asset=loaded.state.assets.find(a=>a.id===args.profile_resource_id);
+ if(!asset||asset.episodeId||asset.mime!=='application/json'||asset.size>1024*1024||asset.key!=='users/'+encodeURIComponent(owner)+'/'+asset.id)throw fail(400,'Cần file JSON hồ sơ riêng của chủ Xưởng, dùng chung dự án, tối đa 1 MiB.');
+ const object=await env.BUCKET.get(asset.key);if(!object)throw fail(503,'File hồ sơ chưa có trong kho; chờ đồng bộ rồi thử lại.');
+ const bytes=await object.arrayBuffer();if(bytes.byteLength!==asset.size||bytes.byteLength>1024*1024)throw fail(400,'Kích thước file hồ sơ không khớp.');
+ let packet;try{packet=JSON.parse(new TextDecoder().decode(bytes));}catch{throw fail(400,'Không đọc được JSON hồ sơ.');}
+ if(packet.protocol!=='valley-reference-profile/1'||!packet.profile)throw fail(400,'Sai giao thức file hồ sơ.');
+ const profile=packet.profile;if(!Array.isArray(profile.shots)||!profile.shots.length||profile.shots.length>300)throw fail(400,'Hồ sơ cần 1–300 shot.');const imageIds=new Set(profile.shots.map(s=>s?.imageId));
+ for(const id of imageIds){const image=loaded.state.assets.find(a=>a.id===id);if(!image||image.episodeId||image.category!=='reference'||image.size>4*1024*1024||!image.mime.startsWith('image/')||image.key!=='users/'+encodeURIComponent(owner)+'/'+image.id)throw fail(400,'Ảnh hồ sơ phải được tải thật vào thư viện reference của chủ Xưởng trước.');}
+ const response=await referenceProfileApi(new Request('https://studio.invalid/api/reference-profiles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({profile,assets:[],expectedRevision:loaded.revision})}),env,owner),result=await response.json(),id=result.reference?.id||result.id;
+ try{
+  const previous=result.alreadyImported?await env.DB.prepare('SELECT * FROM reference_jobs WHERE owner = ? AND reference_id = ? ORDER BY created_at DESC LIMIT 1').bind(owner,id).first():null;
+  return {...result,profileResourceId:asset.id,...(previous?{job:rpPublicJob(previous)}:await queueReferenceAnalysis(env,owner,id))};
+ }catch(error){return {...result,profileResourceId:asset.id,queueError:error.message};}
+}
 export async function validateProfileBindings(env,owner,state){
  const active=state.references.filter(r=>r.package);if(!active.length)return;
  const ids=new Set(state.assets.filter(a=>!a.episodeId&&a.mime.startsWith('image/')).map(a=>a.id));

@@ -1,6 +1,7 @@
 import {readState,handleApi,fail,mimeTypes} from './api.js';
 
 export const LIBRARY_UPLOAD_PROTOCOL='valley-library-upload/1';
+export const LIBRARY_BATCH_PROTOCOL='valley-library-batch/1';
 const LIBRARY_UPLOAD_TTL=15*60*1000;
 const libraryHex=bytes=>Array.from(new Uint8Array(bytes),n=>n.toString(16).padStart(2,'0')).join('');
 async function libraryHash(value){return libraryHex(await crypto.subtle.digest('SHA-256',typeof value==='string'?new TextEncoder().encode(value):value));}
@@ -42,6 +43,28 @@ export async function prepareLibraryUpload(env,owner,args){
  await env.DB.prepare('DELETE FROM library_uploads WHERE expires_at < ? AND status != ?').bind(Date.now()-86400000,'uploading').run();
  await env.DB.prepare('INSERT INTO library_uploads (id,owner,identity,token_hash,metadata,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(asset.id,owner,JSON.stringify({id:user.id,login:user.login}),await libraryHash(token),JSON.stringify(asset),'pending',expires,at,at).run();
  return {uploadRequired:true,uploadUrl:origin+'/api/library-uploads/'+asset.id,uploadToken:token,expiresAt:new Date(expires).toISOString(),maxUploadBytes:libraryMaximum(env),asset,method:'PUT',note:'Gửi byte gốc qua HTTPS với Authorization: Bearer uploadToken và Content-Type đúng MIME. Token chỉ dành cho tệp này trong 15 phút; không ghi vào tài liệu/Git. Sau PUT thành công có thể GET cùng URL/token để kiểm tra byte. Tải cho người dùng qua asset.url trong Xưởng sau đăng nhập.'};
+}
+
+// Authorize many independent files with one MCP round trip. Bytes still use
+// individual immutable uploads, each scoped to its own size, MIME and digest.
+export async function prepareLibraryBatch(env,owner,args){
+ const origin=libraryOrigin(env),user=env.MCP_IDENTITY;
+ if(!env.MCP_OAUTH||!user||user.id!==owner||!/^github:\d+$/.test(user.id)||typeof user.login!=='string')throw fail(403,'Cần MCP Cloudflare của chủ Xưởng để nhập theo lô.');
+ if(!Array.isArray(args.files)||!args.files.length||args.files.length>100)throw fail(400,'Mỗi lô cần 1–100 tệp.');
+ const loaded=await readState(env,owner),at=new Date().toISOString(),expires=Date.now()+LIBRARY_UPLOAD_TTL,seen=new Set(),uploads=[],statements=[];
+ for(const file of args.files){
+  const asset=libraryMetadata(file,owner,libraryMaximum(env)),key=JSON.stringify([asset.name,asset.mime,asset.sha256,asset.episodeId,asset.category]);
+  if(seen.has(key))throw fail(400,'Lô có metadata tệp trùng.');seen.add(key);
+  if(asset.episodeId&&!loaded.state.episodes.some(e=>e.id===asset.episodeId))throw fail(404,'Không tìm thấy tập phim.');
+  const duplicate=loaded.state.assets.find(a=>a.name===asset.name&&a.mime===asset.mime&&a.size===asset.size&&a.sha256===asset.sha256&&a.episodeId===asset.episodeId&&a.category===asset.category);
+  if(duplicate){uploads.push({uploadRequired:false,asset:duplicate});continue;}
+  const token=libraryHex(crypto.getRandomValues(new Uint8Array(32)));
+  statements.push(env.DB.prepare('INSERT INTO library_uploads (id,owner,identity,token_hash,metadata,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(asset.id,owner,JSON.stringify({id:user.id,login:user.login}),await libraryHash(token),JSON.stringify(asset),'pending',expires,at,at));
+  uploads.push({uploadRequired:true,uploadUrl:origin+'/api/library-uploads/'+asset.id,uploadToken:token,expiresAt:new Date(expires).toISOString(),asset,method:'PUT'});
+ }
+ if(loaded.state.assets.length+statements.length>600)throw fail(413,'Lô vượt giới hạn 600 tài nguyên của thư viện.');
+ if(statements.length)await env.DB.batch(statements);
+ return {protocol:LIBRARY_BATCH_PROTOCOL,uploads,revision:loaded.revision,note:'Quyền riêng cho từng tệp, hạn 15 phút. PUT byte thật với token tương ứng; kiểm tra receipt. Metadata chưa phải tệp đã tải hoặc ảnh đã đọc.'};
 }
 
 // Compatibility for clients caching the original nine-tool catalog. The reserved

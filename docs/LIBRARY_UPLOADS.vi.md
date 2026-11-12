@@ -33,3 +33,7 @@ Nếu chưa gọi được tool mới, dùng cầu nối có phiên bản qua to
 Dùng `library:project` để lưu chung dự án. `claim_token` bắt buộc rỗng ở namespace này; không sao chép hoặc dùng claim cũ. MIME ngoài phong bì là JSON để tương thích schema cũ; MIME tệp gốc nằm bên trong. Chỉ gửi metadata, không nhét PDF/ZIP lớn vào `content`. Sau bước cấp quyền vẫn phải PUT file thật và kiểm tra kết quả, không báo đã đồng bộ chỉ vì nhận được URL.
 
 Các UUID đầu việc bình thường vẫn đi qua toàn bộ kiểm tra claim, lease, đầu vào và giới hạn 1 MiB. Cầu nối này không thay đổi quy tắc bàn giao giữa các tài khoản Codex.
+
+## Cấp quyền theo lô
+
+Khi `studio_get_project.libraryBatch` công bố `valley-library-batch/1`, có thể dùng `studio_save_artifact` với `task_id="library-batch:project"`, claim rỗng, JSON/UTF-8. Content gồm `protocol` và `files` (1–100 metadata tệp, cùng các trường như nhập một file). Kết quả `uploads` có quyền riêng cho từng file; không công bố hoặc lưu token vào Git/tài liệu. Đây chỉ là gom một lượt cấp quyền. Mỗi file vẫn cần PUT byte thật, kiểm tra receipt; không báo hoàn thành sau bước metadata. Đối chiếu file có sẵn theo digest/tên/MIME/phạm vi/phân loại để tránh trùng. Token không được dùng cho file khác hoặc endpoint khác.
