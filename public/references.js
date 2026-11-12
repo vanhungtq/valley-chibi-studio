@@ -23,6 +23,8 @@ export function collectReference(form,draft){
  return r;
 }
 export function referencePreview(r,state){
+ if(r.package){const cover=state.assets.find(a=>a.id===r.imageIds?.[0]);return `${cover?`<img class="reference-cover" src="${esc(cover.url)}" alt="${esc(r.title)}" loading="lazy">`:''}<p class="text-small muted">${r.shotCount} shot từ ZIP · ${r.analysisStatus==='complete'?'Codex đã phân tích':r.analysisStatus==='stale'?'Cần phân tích lại':'Chưa phân tích'}</p><div class="tags">${[...(r.videoTypes||[]),...(r.sceneTypes||[])].map(t=>`<span>${esc(t)}</span>`).join('')}</div>`;}
+
  const media=referenceMedia(r,state),cover=media.find(a=>a.mime.startsWith('image/'));
  return `${cover?`<img class="reference-cover" src="${esc(cover.url)}" alt="${esc(r.title)}" loading="lazy">`:''}<p class="text-small muted">${(r.shots||[]).length} shot phân tích · ${media.filter(a=>a.mime.startsWith('image/')).length} ảnh${r.videoId?' · Có video':''}</p>`;
 }

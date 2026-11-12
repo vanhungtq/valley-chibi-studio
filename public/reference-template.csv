@@ -1,0 +1,3 @@
+scene_id,scene_type,shot_id,timecode,image_path,description,size,lens,move
+SC01,Hái rau,S01,00:00–00:05,shots/S01.jpg,Tay hái rau trong vườn,CU,,
+SC02,Cuốc đất,S02,00:05–00:09,shots/S02.jpg,Chuẩn bị luống đất,WS,,

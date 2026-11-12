@@ -1,0 +1,19 @@
+import {DatabaseSync} from 'node:sqlite';
+import {readFile} from 'node:fs/promises';
+import {handleApi,saveState} from '../worker/api.js';
+import {seedState} from '../public/data.js';
+export const referenceOwner='github:123';
+export async function referenceFixture(){
+ const sqlite=new DatabaseSync(':memory:');for(const name of ['0000_studio','0001_codex_tasks','0002_production_review','0003_library_uploads','0004_reference_profiles'])sqlite.exec(await readFile(new URL('../drizzle/'+name+'.sql',import.meta.url),'utf8'));
+ const DB={prepare(sql){return {bind(...args){return {async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){return {meta:{changes:Number(sqlite.prepare(sql).run(...args).changes)}};}};}};},async batch(statements){sqlite.exec('BEGIN');try{const result=[];for(const statement of statements)result.push(await statement.run());sqlite.exec('COMMIT');return result;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
+ const objects=new Map(),BUCKET={async put(key,data,options){objects.set(key,{body:await new Response(data).arrayBuffer(),...options});},async get(key){const o=objects.get(key);return o?{...o,size:o.body.byteLength,text:async()=>new TextDecoder().decode(o.body),arrayBuffer:async()=>o.body.slice(0)}:null;},async delete(key){objects.delete(key);}};
+ const env={DB,BUCKET,MCP_OAUTH:true,MCP_IDENTITY:{id:referenceOwner,login:'alice'},FILE_MAX_BYTES:20*1024*1024},state=seedState();state.episodes[0].sample=false;await saveState(env,referenceOwner,state,0);
+ const api=async(path,options={},owner=referenceOwner)=>{const headers=new Headers(options.headers);headers.set('oai-authenticated-user-id',owner);if(options.body&&!(options.body instanceof FormData)&&!headers.has('content-type'))headers.set('content-type','application/json');return handleApi(new Request(new URL(path,'https://studio.test'),{...options,headers}),env);};
+ return {sqlite,env,api,objects};
+}
+export async function importReferenceFixture(f){
+ const assets=[];for(const name of ['vegetables.jpg','soil.jpg']){const body=new FormData();body.set('file',new File(['fixture-image'],name,{type:'image/jpeg'}));const result=await f.api('/api/files',{method:'POST',body});assets.push({...await result.json(),category:'reference',episodeId:null,description:'',tags:'reference'});}
+ const profile={id:crypto.randomUUID(),title:'Cooking reference',source:'Example channel',url:'https://example.test/video',note:'Study framing',tags:'reference',videoTypes:['Nấu ăn'],sourceCsv:'shot_id,scene_type\nS01,Hái rau\nS02,Cuốc đất',zipName:'reference.zip',importHash:'a'.repeat(64),shots:assets.map((a,i)=>({id:'S0'+(i+1),originalId:'S0'+(i+1),sceneId:'SC0'+(i+1),sceneTitle:i?'Soil preparation':'Vegetable harvesting',sceneTypes:[i?'Cuốc đất':'Hái rau'],title:'Shot '+(i+1),timecode:i?'00:05–00:09':'00:00–00:05',size:'CU',lens:'',move:'',note:'User CSV description',imageId:a.id}))};
+ const response=await f.api('/api/reference-profiles',{method:'POST',body:JSON.stringify({profile,assets,expectedRevision:1})});return {response,profile,assets};
+}
+export function referenceAnalysisFixture(profile){return {title:'Framing study',summary:'Principles visible in the supplied stills.',observations:profile.shots.map(s=>({shotId:s.id,imageId:s.imageId,observation:'Hands and tools occupy the foreground; background remains visible.'})),skills:profile.shots.map(s=>({title:s.sceneTypes[0]+' framing',technique:'Layer foreground action against a clear background.',application:'Use the real location and own character actions to apply this composition.',roles:['creative','writer','camera','designer'],sourceShotIds:[s.id],sceneTypes:s.sceneTypes})),limits:['Only stills and CSV were provided; camera motion, sound and the full edit were not observed.']};}

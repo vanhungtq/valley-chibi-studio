@@ -13,7 +13,7 @@ import {chooseResources} from '../worker/api.js';
 import {shotPhotoEditor,actualPhotoStrip,reopenForPhotos} from '../public/shot-photos.js';
 
 const dossierOwner='github:123';
-const dossierSql=await Promise.all(['0000_studio','0001_codex_tasks','0002_production_review','0003_library_uploads'].map(n=>readFile(new URL('../drizzle/'+n+'.sql',import.meta.url),'utf8')));
+const dossierSql=await Promise.all(['0000_studio','0001_codex_tasks','0002_production_review','0003_library_uploads','0004_reference_profiles'].map(n=>readFile(new URL('../drizzle/'+n+'.sql',import.meta.url),'utf8')));
 const dossierCsv='\uFEFFshotId,sceneId,sceneTitle,page,panel,start,end,seconds,timecode,lensMm,size,angle,move,action,continuity,sound,lighting,aperture,recording,techniqueRefs\r\nS01,SC01,Opening,1,1,0,30,30,00:00–00:30,18,WS,Low,Static,"First, action\nwith ""quotes""",Keep axis,Birds,Soft,F4,4K25p,V03\r\nS02,SC01,Opening,1,2,30,60,30,00:30–01:00,50,CU,Eye,Static,Second action,Keep axis,Footsteps,Soft,F4,4K25p,V04\r\n';
 async function dossierFixture(){
  const sqlite=new DatabaseSync(':memory:');sqlite.exec(dossierSql.join('\n'));

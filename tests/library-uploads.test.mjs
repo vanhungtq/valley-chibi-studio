@@ -8,7 +8,7 @@ import {handleMcp} from '../worker/mcp.js';
 import {seedState} from '../public/data.js';
 
 const ORIGIN='https://studio.test',OWNER='github:123';
-const migrations=await Promise.all(['0000_studio','0001_codex_tasks','0002_production_review','0003_library_uploads'].map(n=>readFile(new URL('../drizzle/'+n+'.sql',import.meta.url),'utf8')));
+const migrations=await Promise.all(['0000_studio','0001_codex_tasks','0002_production_review','0003_library_uploads','0004_reference_profiles'].map(n=>readFile(new URL('../drizzle/'+n+'.sql',import.meta.url),'utf8')));
 const sha=async data=>Buffer.from(await crypto.subtle.digest('SHA-256',data)).toString('hex');
 async function fixture(){
  const sqlite=new DatabaseSync(':memory:');sqlite.exec(migrations.join('\n'));

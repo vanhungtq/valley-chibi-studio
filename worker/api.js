@@ -1,3 +1,5 @@
+import {referenceProfileApi,listReferenceJobs,validateProfileBindings,assertReferenceFileUnused} from './reference-profiles.js';
+import {filterReferenceRecord,validateReferenceSelection} from '../public/reference-catalog.js';
 import {resumeEpisodeDossier} from './episode-work.js';
 import {validateEpisodeDossiers} from './episode-dossiers.js';
 import { AGENTS, STAGES, seedState, SCENES } from '../public/data.js';
@@ -43,6 +45,7 @@ function validState(v,owner){
   if(!isObj(e)||typeof e.id!=='string'||ids.has(e.id)||typeof e.title!=='string'||!e.title.trim()||typeof e.brief!=='string'||!Number.isInteger(e.stage)||e.stage<0||e.stage>5||!Array.isArray(e.approved)||!Array.isArray(e.scenes)||!Array.isArray(e.activity)||!Array.isArray(e.versions)||!Array.isArray(e.notes)||!isObj(e.outputs))throw fail(400,'Tập phim không hợp lệ.');
   if(e.targetMinutes!==undefined&&(!Number.isInteger(e.targetMinutes)||e.targetMinutes<1||e.targetMinutes>240))throw fail(400,'Thời lượng mục tiêu phải là số phút nguyên từ 1 đến 240.');
   if(e.autoApprove!==undefined&&typeof e.autoApprove!=='boolean')throw fail(400,'Chế độ tự động duyệt phải là bật hoặc tắt.');
+  if(e.referenceSelection!==undefined)try{validateReferenceSelection(e.referenceSelection);}catch(error){throw fail(400,error.message);}
   ids.add(e.id);validateScenes(e.scenes);
  }
  if(v.episodes.length&&!ids.has(v.activeEpisode))throw fail(400,'Tập hiện tại không tồn tại.');
@@ -97,7 +100,7 @@ function fingerprint(state,e){return JSON.stringify({brief:e.brief,targetMinutes
 export function chooseResources(state,e){
  const words=new Set((e.brief+' '+e.title).toLowerCase().split(/\s+/).filter(x=>x.length>2));
  const score=x=>Array.from(words).filter(w=>JSON.stringify(x).toLowerCase().includes(w)).length;
- const references=state.references.filter(a=>!a.episodeId||a.episodeId===e.id).sort((a,b)=>score(b)-score(a)).slice(0,10);
+ const references=state.references.filter(a=>!a.episodeId||a.episodeId===e.id).map(r=>filterReferenceRecord(r,e.referenceSelection)).filter(Boolean).sort((a,b)=>score(b)-score(a)).slice(0,10);
  const eligible=state.assets.filter(a=>!a.episodeId||a.episodeId===e.id).sort((a,b)=>score(b)-score(a));
  const explicit=new Set([...references.flatMap(r=>[...(r.imageIds||[]),r.videoId,...(r.shots||[]).map(s=>s.imageId)]),...e.scenes.flatMap(s=>s.shots.flatMap(sh=>sh.assetIds||[])),...Object.values(e.storyboards||{}).map(b=>b.assetId),...Object.values(e.actualPhotos||{}).flatMap(photos=>photos.map(p=>p.assetId)),...Object.values(e.workingSource?.fileIds||{})].filter(Boolean));
  const assets=eligible.filter(a=>explicit.has(a.id)||eligible.indexOf(a)<16);
@@ -114,6 +117,8 @@ export async function handleApi(request,env){
  if(path==='/api/config'&&request.method==='GET')return json({executionMode:'codex',externalModelCalls:false,bridgeReady:!!env.DB&&!!env.BUCKET,storageReady:!!env.DB&&!!env.BUCKET,signedIn:!!owner,displayName:clean(request.headers.get('oai-authenticated-user-full-name')||request.headers.get('oai-authenticated-user-email')||'Nhà sáng tạo'),storageProvider:env.FILE_STORAGE_DRIVER||'r2',maxUploadBytes:env.FILE_MAX_BYTES||MAX_FILE});
  if(!owner)throw fail(401,'Vui lòng đăng nhập để mở dự án.');
  if(!env.DB||!env.BUCKET)throw fail(503,'Kho lưu trữ của studio chưa sẵn sàng.');
+ if(path.startsWith('/api/reference-profiles'))return await referenceProfileApi(request,env,owner);
+ if(path==='/api/reference-jobs'&&request.method==='GET')return json({jobs:await listReferenceJobs(env,owner)});
  if(path==='/api/production'&&request.method==='GET')return json(WORKFLOW);
  if(path==='/api/episodes/resume'&&request.method==='POST')return json(await resumeEpisodeDossier(env,owner,await body(request)));
  if(path==='/api/episodes/start'&&request.method==='POST')return json(await startEpisode(env,owner,await body(request)));
@@ -122,7 +127,7 @@ export async function handleApi(request,env){
  if(path==='/api/state'){
   if(request.method==='GET')return json(await readState(env,owner));
   if(request.method==='PUT'){
-   const b=await body(request);validState(b.state,owner);if(!Number.isInteger(b.revision)||b.revision<0)throw fail(400,'Thiếu phiên bản dữ liệu.');
+   const b=await body(request);validState(b.state,owner);await validateProfileBindings(env,owner,b.state);if(!Number.isInteger(b.revision)||b.revision<0)throw fail(400,'Thiếu phiên bản dữ liệu.');
    const revision=await saveState(env,owner,b.state,b.revision);await reconcileReviews(env,owner,b.state);return json({revision,updatedAt:b.state.updatedAt});
   }
  }
@@ -141,7 +146,7 @@ export async function handleApi(request,env){
  if(path.startsWith('/api/files/')){
   const id=path.slice('/api/files/'.length);if(!/^[a-f0-9-]{36}$/.test(id))throw fail(400,'ID tệp không hợp lệ.');
   const key='users/'+encodeURIComponent(owner)+'/'+id;
-  if(request.method==='DELETE'){await env.BUCKET.delete(key);return json({ok:true});}
+  if(request.method==='DELETE'){await assertReferenceFileUnused(env,owner,id);await env.BUCKET.delete(key);return json({ok:true});}
   if(request.method==='GET'){
    const object=await env.BUCKET.get(key,request.headers.has('range')?{range:request.headers}:undefined);if(!object){if(env.FILE_STORAGE_DRIVER==='kv'){const {state}=await readState(env,owner);const expected=state.assets.some(a=>a.id===id)||state.episodes.some(e=>Object.values(e.outputs).some(o=>(o.artifacts||[]).some(a=>a.id===id)));if(expected)throw Object.assign(fail(503,'Tệp đang đồng bộ trong Workers KV. Hãy chờ rồi thử lại.'),{retryAfter:'5'});}throw fail(404,'Không tìm thấy tệp.');}
    const headers=new Headers({'content-type':object.httpMetadata?.contentType||'application/octet-stream','cache-control':'private, max-age=60','x-content-type-options':'nosniff'});
