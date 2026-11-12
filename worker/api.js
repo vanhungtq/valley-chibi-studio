@@ -1,3 +1,4 @@
+import {resumeEpisodeDossier} from './episode-work.js';
 import {validateEpisodeDossiers} from './episode-dossiers.js';
 import { AGENTS, STAGES, seedState, SCENES } from '../public/data.js';
 import {handleTasks,reconcileReviews,setWorkflow,continueWorkflow,startEpisode} from './bridge.js';
@@ -68,6 +69,11 @@ function validState(v,owner){
   const shotIds=new Set(e.scenes.flatMap(s=>s.shots.map(sh=>sh.id)));
   for(const [id,b] of Object.entries(e.storyboards))if(!shotIds.has(id)||!isObj(b)||!linked(b.assetId,'image',e.id)||!(b.panel===null||Number.isInteger(b.panel)&&b.panel>=0&&b.panel<4)||typeof b.generated!=='boolean')throw fail(400,'Ảnh storyboard phải liên kết đúng shot và tài nguyên.');
  }
+ for(const e of v.episodes)if(e.actualPhotos!==undefined){
+  if(!isObj(e.actualPhotos))throw fail(400,'Ảnh thực tế không hợp lệ.');
+  const shotIds=new Set(e.scenes.flatMap(s=>s.shots.map(sh=>sh.id)));
+  for(const [id,photos] of Object.entries(e.actualPhotos)){if(!shotIds.has(id)||!Array.isArray(photos)||photos.length>20)throw fail(400,'Ảnh thực tế cần đúng ID shot, tối đa 20 ảnh/shot.');const seen=new Set();for(const p of photos){if(!isObj(p)||seen.has(p.assetId)||!linked(p.assetId,'image',e.id)||typeof p.note!=='string'||p.note.length>2000)throw fail(400,'Ảnh thực tế hoặc ghi chú không hợp lệ.');seen.add(p.assetId);}}
+ }
  validateEpisodeDossiers(v);
 }
 export function validateScenes(scenes){
@@ -93,7 +99,7 @@ export function chooseResources(state,e){
  const score=x=>Array.from(words).filter(w=>JSON.stringify(x).toLowerCase().includes(w)).length;
  const references=state.references.filter(a=>!a.episodeId||a.episodeId===e.id).sort((a,b)=>score(b)-score(a)).slice(0,10);
  const eligible=state.assets.filter(a=>!a.episodeId||a.episodeId===e.id).sort((a,b)=>score(b)-score(a));
- const explicit=new Set([...references.flatMap(r=>[...(r.imageIds||[]),r.videoId,...(r.shots||[]).map(s=>s.imageId)]),...e.scenes.flatMap(s=>s.shots.flatMap(sh=>sh.assetIds||[])),...Object.values(e.storyboards||{}).map(b=>b.assetId)].filter(Boolean));
+ const explicit=new Set([...references.flatMap(r=>[...(r.imageIds||[]),r.videoId,...(r.shots||[]).map(s=>s.imageId)]),...e.scenes.flatMap(s=>s.shots.flatMap(sh=>sh.assetIds||[])),...Object.values(e.storyboards||{}).map(b=>b.assetId),...Object.values(e.actualPhotos||{}).flatMap(photos=>photos.map(p=>p.assetId)),...Object.values(e.workingSource?.fileIds||{})].filter(Boolean));
  const assets=eligible.filter(a=>explicit.has(a.id)||eligible.indexOf(a)<16);
  return {assets,references,selection:{availableAssets:eligible.length,includedAssets:assets.length,availableReferences:state.references.filter(r=>!r.episodeId||r.episodeId===e.id).length,includedReferences:references.length,note:'Gói gồm tư liệu liên quan, toàn bộ ảnh/video gắn với reference được chọn và ảnh gắn shot. Đọc tệp thật qua studio_read_resource; ghi chú và URL không chứng minh đã xem video. Có thể đọc studio_get_project để kiểm tra nguồn còn thiếu.'}};
 }
@@ -109,6 +115,7 @@ export async function handleApi(request,env){
  if(!owner)throw fail(401,'Vui lòng đăng nhập để mở dự án.');
  if(!env.DB||!env.BUCKET)throw fail(503,'Kho lưu trữ của studio chưa sẵn sàng.');
  if(path==='/api/production'&&request.method==='GET')return json(WORKFLOW);
+ if(path==='/api/episodes/resume'&&request.method==='POST')return json(await resumeEpisodeDossier(env,owner,await body(request)));
  if(path==='/api/episodes/start'&&request.method==='POST')return json(await startEpisode(env,owner,await body(request)));
  if(path.startsWith('/api/tasks'))return await handleTasks(request,env,owner);
  if(path==='/api/workflow'&&request.method==='POST'){const b=await body(request);return json(await setWorkflow(env,owner,b.episodeId,b.autoApprove));}

@@ -3,6 +3,8 @@
 Vào **Tập phim → Hồ sơ tập phim** để mở các phiên bản được trình bày từ file đã có.
 Mỗi phiên bản có tên riêng, thời lượng, ảnh storyboard, shotlist đọc trực tiếp và bốn tài liệu: PDF, ZIP, CSV, kiến thức Markdown.
 
+Bấm **Tiếp tục trong Xưởng** để dùng bản hồ sơ làm nền cho lần nâng cấp tiếp, thêm ảnh thực tế và ghi chú cho từng shot. Xem [hướng dẫn ảnh thực tế](SHOT_PHOTOS.vi.md).
+
 - **Tổng quan**: mạch chuyện theo cảnh, thời lượng và bộ tài liệu.
 - **Storyboard**: xem từng bảng ảnh AI, lọc phân cảnh, bấm để phóng lớn. Các ô giữ thứ tự trên trái, trên phải, dưới trái, dưới phải.
 - **Shotlist**: lọc cảnh, mở mỗi shot để đọc góc máy, ánh sáng, âm thanh và continuity.

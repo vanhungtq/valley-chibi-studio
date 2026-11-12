@@ -1,3 +1,4 @@
+import {resumeEpisodeDossier,EPISODE_WORK_PROTOCOL} from './episode-work.js';
 import {readState,saveState,fail} from './api.js';
 
 export const DOSSIER_PROTOCOL='valley-episode-dossier/1';
@@ -98,6 +99,7 @@ export async function publishLegacyEpisodeDossier(env,owner,args){
  const match=/^episode:([a-zA-Z0-9_-]{1,80})$/.exec(args.task_id||'');
  if(!match||args.claim_token!==''||args.mime!=='application/json'||args.encoding!=='utf8'||args.storyboard_shot_ids!==undefined)throw fail(400,'Hồ sơ dùng namespace episode:<id>, claim rỗng và phong bì JSON.');
  let value;try{value=JSON.parse(args.content);}catch{throw fail(400,'Phong bì hồ sơ không phải JSON.');}
+ if(value?.protocol===EPISODE_WORK_PROTOCOL&&value.episode_id===undefined){if(!env.MCP_OAUTH||env.MCP_IDENTITY?.id!==owner)throw fail(403,'Cần MCP Cloudflare của chủ Xưởng.');return resumeEpisodeDossier(env,owner,{...value,episode_id:match[1]});}
  if(value?.protocol!==DOSSIER_PROTOCOL||value.episode_id!==undefined)throw fail(400,'Sai giao thức hoặc phạm vi hồ sơ.');
  return publishEpisodeDossier(env,owner,{...value,episode_id:match[1]});
 }

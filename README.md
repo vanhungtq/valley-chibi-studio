@@ -33,6 +33,8 @@ Chọn **Workers & Pages → Create application → Continue with GitHub**. Dùn
 
 [Trình bày phiên bản hồ sơ trong Tập phim](docs/EPISODE_DOSSIERS.vi.md): xem storyboard, shotlist, PDF và tải bộ tài liệu ngay trong một trang hồ sơ.
 
+[Nâng cấp tiếp bằng ảnh thực tế](docs/SHOT_PHOTOS.vi.md): mở lại hồ sơ trong Xưởng, gắn ảnh/ghi chú theo shot, giao Agent rà soát và giữ lịch sử phiên bản.
+
 Bản này chạy độc lập với Sites. Tạo GitHub OAuth App với callback `https://<domain>/auth/callback`; đặt `PUBLIC_ORIGIN`, allowlist GitHub và hai secret của OAuth App trong Worker. AI và tạo ảnh vẫn thực hiện trong ChatGPT/Codex qua MCP; không cần khóa API mô hình. Plugin Sites cũ không tự chuyển sang domain Cloudflare. Không dùng Pages static cho bản này.
 
 Sau deploy, kiểm tra `/healthz`, đăng nhập website rồi thêm custom MCP vào ChatGPT/Codex bằng URL `/mcp`. Mục Zero Trust **MCP servers / Server portals** là lớp quản lý/gom server tùy chọn; một Xưởng riêng có thể kết nối thẳng MCP.
