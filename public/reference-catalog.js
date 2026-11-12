@@ -5,6 +5,7 @@ export const referenceTags=value=>[...new Set((Array.isArray(value)?value:String
 export function referenceTaxonomy(state){return {videoTypes:referenceTags([...REFERENCE_VIDEO_TYPES,...state.references.flatMap(r=>r.videoTypes||[])]),sceneTypes:referenceTags([...REFERENCE_SCENE_TYPES,...state.references.flatMap(r=>r.sceneTypes||[])])};}
 export function validateReferenceSelection(selection){
  if(!selection||typeof selection!=='object'||Array.isArray(selection))throw new Error('Lựa chọn reference không hợp lệ.');
+ if(selection.dnaEnabled!==undefined&&typeof selection.dnaEnabled!=='boolean')throw new Error('Lựa chọn DNA không hợp lệ.');
  for(const [key,max] of [['videoTypes',30],['sceneTypes',50],['referenceIds',10]])if(!Array.isArray(selection[key])||selection[key].length>max||selection[key].some(v=>typeof v!=='string'||!v.trim()||v.length>100))throw new Error('Lựa chọn reference vượt giới hạn hoặc sai định dạng.');
 }
 export function filterReferenceRecord(record,selection){

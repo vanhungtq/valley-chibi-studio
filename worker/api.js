@@ -1,3 +1,4 @@
+import {projectDnaApi,validateDnaConfig} from './project-dna.js';
 import {referenceProfileApi,listReferenceJobs,validateProfileBindings,assertReferenceFileUnused} from './reference-profiles.js';
 import {filterReferenceRecord,validateReferenceSelection} from '../public/reference-catalog.js';
 import {resumeEpisodeDossier} from './episode-work.js';
@@ -39,6 +40,7 @@ export async function body(r){
 function validState(v,owner){
  if(!isObj(v)||v.schema!==1||!isObj(v.project)||!Array.isArray(v.episodes)||!Array.isArray(v.assets)||!Array.isArray(v.references))throw fail(400,'Cấu trúc dự án không hợp lệ.');
  if(v.episodes.length>100||v.assets.length>600||v.references.length>300)throw fail(400,'Dự án vượt giới hạn của bản đầu.');
+ if(v.project.dnaConfig!==undefined)validateDnaConfig(v.project.dnaConfig);
  for(const field of ['name','audience','language','duration','bible'])if(typeof v.project[field]!=='string')throw fail(400,'Nền tảng dự án thiếu thông tin.');
  const ids=new Set();
  for(const e of v.episodes){
@@ -117,6 +119,7 @@ export async function handleApi(request,env){
  if(path==='/api/config'&&request.method==='GET')return json({executionMode:'codex',externalModelCalls:false,bridgeReady:!!env.DB&&!!env.BUCKET,storageReady:!!env.DB&&!!env.BUCKET,signedIn:!!owner,displayName:clean(request.headers.get('oai-authenticated-user-full-name')||request.headers.get('oai-authenticated-user-email')||'Nhà sáng tạo'),storageProvider:env.FILE_STORAGE_DRIVER||'r2',maxUploadBytes:env.FILE_MAX_BYTES||MAX_FILE});
  if(!owner)throw fail(401,'Vui lòng đăng nhập để mở dự án.');
  if(!env.DB||!env.BUCKET)throw fail(503,'Kho lưu trữ của studio chưa sẵn sàng.');
+ if(path==='/api/dna')return await projectDnaApi(request,env,owner);
  if(path.startsWith('/api/reference-profiles'))return await referenceProfileApi(request,env,owner);
  if(path==='/api/reference-jobs'&&request.method==='GET')return json({jobs:await listReferenceJobs(env,owner)});
  if(path==='/api/production'&&request.method==='GET')return json(WORKFLOW);
