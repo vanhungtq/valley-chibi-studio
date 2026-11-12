@@ -2,3 +2,5 @@
 @media(max-width:700px){.reference-column-grid{grid-template-columns:1fr 1fr}.reference-classify-grid,.reference-shot-grid{grid-template-columns:1fr}.reference-library-filters{flex-wrap:wrap}.reference-library-filters label{width:100%}.reference-library-filters select{width:100%}.reference-preview-images{grid-template-columns:1fr 1fr}.reference-steering{padding:13px}.reference-import-table td{max-width:160px}.reference-shot-grid img{height:auto;max-height:300px}.reference-column-grid select{width:100%;min-width:0}}
 
 .reference-learnings{border:1px solid var(--line);border-radius:12px;padding:18px}.reference-learnings>summary{cursor:pointer;font-size:13px}.reference-learnings[open]>summary{margin-bottom:16px}
+
+.codex-session-help{font-size:12px;line-height:1.8;color:var(--text-soft);margin:14px 0}.codex-switch-tools{margin:14px 0;font-size:11px;color:var(--text-soft)}.codex-switch-tools summary{cursor:pointer}.codex-switch-tools>p{line-height:1.7}.codex-switch-tools .row,.codex-switch-tools .dossier-actions{margin-top:12px;flex-wrap:wrap}

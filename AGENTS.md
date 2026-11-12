@@ -44,6 +44,8 @@ Read project data, tasks, saved progress and artifacts through MCP rather than a
 
 The five roles are specialist responsibilities, not a claim that five background Codex sessions are always running. Sequential execution in one Codex session is supported. Additional subagents depend on the user's instructions and the capabilities and policies of the active Codex environment.
 
+The owner's default is one connected Codex conversation; changing accounts is only for quota exhaustion or an explicit handoff. When the owner reports an upload, asks to receive new work, or continues an already-authorized workflow, inspect the live MCP queues and retrieve the actual packets directly. Do not require the owner to copy prompts or task IDs into the same connected conversation. Copy/transfer instructions are optional for a different conversation/account. An App queue action does not itself wake a new chat turn; explain this briefly if needed, without suggesting a hidden background model service.
+
 ## Repository workflow
 
 The owner requests updates directly on `main`. Unless they explicitly request another workflow, do not create feature branches or pull requests. Fetch the latest `main`, preserve the owner's changes, run the checks appropriate to the change, then commit and push normally to `main`. Never force-push or reset the remote branch to bypass concurrent updates.

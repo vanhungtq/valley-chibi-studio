@@ -20,7 +20,7 @@ Sau khi nhập, hồ sơ hiển thị ảnh, shot, timecode và phân cảnh; b�
 
 ## Codex phân tích và lưu kiến thức
 
-Chọn **Giao Codex phân tích** hoặc giữ tùy chọn đó khi nhập ZIP. Trạng thái đầu tiên là **Chờ Codex nhận việc**. Chọn **Sao chép yêu cầu cho Codex**, dán vào phiên đã kết nối MCP. App chỉ giao và lưu công việc; việc nhập ZIP không tự mở một phiên AI.
+Chọn **Giao Codex phân tích** hoặc giữ tùy chọn đó khi nhập ZIP. Trạng thái đầu tiên là **Chờ Codex nhận việc**. Với cuộc trò chuyện Codex đang dùng và đã kết nối MCP, chỉ cần báo “đã tải xong, nhận việc mới”. Codex tự đọc hàng đợi và dữ liệu từ Xưởng; không cần sao chép prompt hay ID đầu việc. App đưa việc vào hàng đợi, MCP không tự mở lượt chat mới. Nút sao chép chỉ nằm trong **Đổi Codex / mở cuộc trò chuyện khác**, dành cho lúc chuyển phiên hoặc hết hạn mức.
 
 Codex phải đọc ảnh thật qua `studio_read_resource`, phân biệt điều quan sát từ ảnh với mô tả trong CSV và suy luận. Timecode có thể cung cấp dữ liệu để tính thời lượng, nhưng ảnh tĩnh không chứng minh chuyển động máy hoặc âm thanh của video hoàn chỉnh.
 
