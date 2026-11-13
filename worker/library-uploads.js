@@ -88,28 +88,24 @@ async function libraryReadBytes(request,expected){
  const bytes=new Uint8Array(length);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}return bytes;
 }
 async function libraryCommit(env,row,asset){
- for(let attempt=0;attempt<5;attempt++){
-  const loaded=await readState(env,row.owner),state=loaded.state,at=new Date().toISOString();
-  const registered=state.assets.find(a=>a.id===asset.id);
-  if(registered){
-   if(registered.sha256!==asset.sha256)throw fail(409,'ID tài nguyên đã có nội dung khác.');
-   await env.DB.prepare("UPDATE library_uploads SET status = 'complete', updated_at = ? WHERE id = ? AND owner = ? AND token_hash = ? AND status = 'uploading'").bind(at,row.id,row.owner,row.token_hash).run();
-   return {asset:registered,revision:loaded.revision};
-  }
-  if(asset.episodeId&&!state.episodes.some(e=>e.id===asset.episodeId))throw fail(409,'Tập phim đã bị gỡ trong lúc nhập tệp.');
-  if(state.assets.length>=600)throw fail(413,'Thư viện đã đạt giới hạn tài nguyên.');
-  state.assets.push(asset);state.updatedAt=at;
-  const active="EXISTS (SELECT 1 FROM library_uploads WHERE id = ? AND owner = ? AND token_hash = ? AND status = 'uploading')";
-  const update=loaded.revision===0
-   ?env.DB.prepare(`INSERT OR IGNORE INTO studio_state (owner,state,revision,updated_at) SELECT ?,?,1,? WHERE ${active}`).bind(row.owner,JSON.stringify(state),at,row.id,row.owner,row.token_hash)
-   :env.DB.prepare(`UPDATE studio_state SET state = ?, revision = revision + 1, updated_at = ? WHERE owner = ? AND revision = ? AND ${active}`).bind(JSON.stringify(state),at,row.owner,loaded.revision,row.id,row.owner,row.token_hash);
-  const complete=env.DB.prepare("UPDATE library_uploads SET status = 'complete', updated_at = ? WHERE id = ? AND owner = ? AND token_hash = ? AND status = 'uploading' AND EXISTS (SELECT 1 FROM studio_state, json_each(studio_state.state,'$.assets') AS item WHERE studio_state.owner = ? AND studio_state.revision = ? AND json_extract(item.value,'$.id') = ? AND json_extract(item.value,'$.sha256') = ?)").bind(at,row.id,row.owner,row.token_hash,row.owner,loaded.revision+1,asset.id,asset.sha256);
-  const result=await env.DB.batch([update,complete]);
-  if(result[0].meta.changes&&result[1].meta.changes)return {asset,revision:loaded.revision+1};
-  const ticket=await env.DB.prepare('SELECT status FROM library_uploads WHERE id = ?').bind(row.id).first();
-  if(ticket?.status==='complete'){const fresh=await readState(env,row.owner);return {asset:fresh.state.assets.find(a=>a.id===asset.id),revision:fresh.revision};}
+ const at=new Date().toISOString(),metadata=JSON.stringify(asset),margin=new TextEncoder().encode(metadata).byteLength+64;
+ const active="EXISTS (SELECT 1 FROM library_uploads WHERE id = ? AND owner = ? AND token_hash = ? AND status = 'uploading')";
+ // File registration is an atomic JSON append in D1. Avoid parsing and
+ // serializing the entire project repeatedly on a Workers Free request.
+ if(!await env.DB.prepare('SELECT revision FROM studio_state WHERE owner = ?').bind(row.owner).first()){
+  const initial=await readState(env,row.owner);
+  await env.DB.prepare(`INSERT OR IGNORE INTO studio_state (owner,state,revision,updated_at) SELECT ?,?,0,? WHERE ${active}`).bind(row.owner,JSON.stringify(initial.state),at,row.id,row.owner,row.token_hash).run();
  }
- throw fail(409,'Dự án đang thay đổi ở phiên khác. Thử nhập lại tệp; không ghi đè dữ liệu.');
+ const append=env.DB.prepare(`UPDATE studio_state SET state = json_set(state, '$.assets[#]', json(?), '$.updatedAt', ?), revision = revision + 1, updated_at = ? WHERE owner = ? AND ${active} AND json_array_length(state,'$.assets') < 600 AND length(CAST(state AS BLOB)) + ? <= 2097152 AND (? IS NULL OR EXISTS (SELECT 1 FROM json_each(state,'$.episodes') e WHERE json_extract(e.value,'$.id') = ?)) AND NOT EXISTS (SELECT 1 FROM json_each(state,'$.assets') a WHERE json_extract(a.value,'$.id') = ?)`)
+  .bind(metadata,at,at,row.owner,row.id,row.owner,row.token_hash,margin,asset.episodeId,asset.episodeId,asset.id);
+ const complete=env.DB.prepare("UPDATE library_uploads SET status = 'complete', updated_at = ? WHERE id = ? AND owner = ? AND token_hash = ? AND status = 'uploading' AND EXISTS (SELECT 1 FROM studio_state s, json_each(s.state,'$.assets') a WHERE s.owner = ? AND json_extract(a.value,'$.id') = ? AND json_extract(a.value,'$.sha256') = ?)")
+  .bind(at,row.id,row.owner,row.token_hash,row.owner,asset.id,asset.sha256);
+ const result=await env.DB.batch([append,complete]);
+ if(result[1].meta.changes){const current=await env.DB.prepare('SELECT revision FROM studio_state WHERE owner = ?').bind(row.owner).first();return {asset,revision:current.revision};}
+ const current=await env.DB.prepare("SELECT json_array_length(state,'$.assets') AS count, length(CAST(state AS BLOB)) AS bytes, EXISTS (SELECT 1 FROM json_each(state,'$.episodes') e WHERE json_extract(e.value,'$.id') = ?) AS has_episode FROM studio_state WHERE owner = ?").bind(asset.episodeId,row.owner).first();
+ if(current?.count>=600||current?.bytes+margin>2*1024*1024)throw fail(413,'Thư viện vượt giới hạn tài nguyên hoặc metadata dự án.');
+ if(asset.episodeId&&!current?.has_episode)throw fail(409,'Tập phim đã bị gỡ trong lúc nhập tệp.');
+ throw fail(409,'Quyền tải hoặc dữ liệu vừa thay đổi. Thử lại tệp, không ghi đè dữ liệu.');
 }
 
 export async function receiveLibraryUpload(request,env,isAllowedIdentity){

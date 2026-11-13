@@ -66,6 +66,20 @@ test('library registration retries a competing state edit without dropping owner
  assert.match(state.state.project.bible,/User edit during transfer/);assert.equal(state.state.assets.length,1);assert.equal(state.revision,3);
 });
 
+test('large project registration preserves production and rejects metadata overflow without leaving a file',async()=>{
+ const f=await fixture(),initial=await readState(f.env,OWNER);initial.state.project.bible+='x'.repeat(1400000);await saveState(f.env,OWNER,initial.state,initial.revision);
+ const data=new Uint8Array([5,6,7]),ticket=await prepareLibraryUpload(f.env,OWNER,await f.meta(data));assert.equal((await f.transfer(ticket,data)).status,201);
+ const current=await readState(f.env,OWNER);assert.deepEqual(current.state.episodes,initial.state.episodes);assert.equal(current.state.project.bible,initial.state.project.bible);assert.equal(current.state.assets.length,1);
+ current.state.project.bible+='x'.repeat(2*1024*1024-Buffer.byteLength(JSON.stringify(current.state))-32);await saveState(f.env,OWNER,current.state,current.revision);
+ const next=await prepareLibraryUpload(f.env,OWNER,await f.meta(data,{filename:'overflow.zip'}));assert.equal((await f.transfer(next,data)).status,413);
+ assert.equal(f.store.size,1);assert.equal((await readState(f.env,OWNER)).state.assets.length,1);assert.equal(f.sqlite.prepare('SELECT status FROM library_uploads WHERE id=?').get(next.asset.id).status,'pending');
+});
+
+test('the first file initializes a missing project atomically before registration',async()=>{
+ const f=await fixture();f.sqlite.prepare('DELETE FROM studio_state WHERE owner=?').run(OWNER);const data=new Uint8Array([2,3]),ticket=await prepareLibraryUpload(f.env,OWNER,await f.meta(data));
+ assert.equal((await f.transfer(ticket,data)).status,201);const state=await readState(f.env,OWNER);assert.equal(state.revision,1);assert.equal(state.state.assets.length,1);assert.equal(state.state.assets[0].id,ticket.asset.id);
+});
+
 test('a failed D1 transaction rolls back the resource and its object before retry',async()=>{
  const f=await fixture(),data=new Uint8Array([7,8]),ticket=await prepareLibraryUpload(f.env,OWNER,await f.meta(data)),batch=f.env.DB.batch;
  f.env.DB.batch=async()=>{throw new Error('storage failure');};assert.equal((await f.transfer(ticket,data)).status,500);assert.equal(f.store.size,0);assert.equal((await readState(f.env,OWNER)).state.assets.length,0);

@@ -37,3 +37,5 @@ Các UUID đầu việc bình thường vẫn đi qua toàn bộ kiểm tra clai
 ## Cấp quyền theo lô
 
 Khi `studio_get_project.libraryBatch` công bố `valley-library-batch/1`, có thể dùng `studio_save_artifact` với `task_id="library-batch:project"`, claim rỗng, JSON/UTF-8. Content gồm `protocol` và `files` (1–100 metadata tệp, cùng các trường như nhập một file). Kết quả `uploads` có quyền riêng cho từng file; không công bố hoặc lưu token vào Git/tài liệu. Đây chỉ là gom một lượt cấp quyền. Mỗi file vẫn cần PUT byte thật, kiểm tra receipt; không báo hoàn thành sau bước metadata. Đối chiếu file có sẵn theo digest/tên/MIME/phạm vi/phân loại để tránh trùng. Token không được dùng cho file khác hoặc endpoint khác.
+
+Đăng ký metadata file dùng phép thêm JSON nguyên tử trong D1, giữ revision và kiểm tra quyền/digest/phạm vi. Request không cần đọc và serialize toàn bộ dự án nhiều lần; điều này giảm CPU cho Workers Free khi thư viện lớn. Giới hạn 600 tài nguyên và 2 MiB metadata vẫn được kiểm tra trước khi ghi.

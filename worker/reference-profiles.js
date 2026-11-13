@@ -33,10 +33,10 @@ export async function importLibraryReference(env,owner,args){
  if(packet.protocol!=='valley-reference-profile/1'||!packet.profile)throw fail(400,'Sai giao thức file hồ sơ.');
  const profile=packet.profile;if(!Array.isArray(profile.shots)||!profile.shots.length||profile.shots.length>300)throw fail(400,'Hồ sơ cần 1–300 shot.');const imageIds=new Set(profile.shots.map(s=>s?.imageId));
  for(const id of imageIds){const image=loaded.state.assets.find(a=>a.id===id);if(!image||image.episodeId||image.category!=='reference'||image.size>4*1024*1024||!image.mime.startsWith('image/')||image.key!=='users/'+encodeURIComponent(owner)+'/'+image.id)throw fail(400,'Ảnh hồ sơ phải được tải thật vào thư viện reference của chủ Xưởng trước.');}
- const response=await referenceProfileApi(new Request('https://studio.invalid/api/reference-profiles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({profile,assets:[],expectedRevision:loaded.revision})}),env,owner),result=await response.json(),id=result.reference?.id||result.id;
+ const response=await referenceProfileApi(new Request('https://studio.invalid/api/reference-profiles',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({profile,assets:[],expectedRevision:loaded.revision})}),env,owner,loaded),result=await response.json(),id=result.reference?.id||result.id;
  try{
   const previous=result.alreadyImported?await env.DB.prepare('SELECT * FROM reference_jobs WHERE owner = ? AND reference_id = ? ORDER BY created_at DESC LIMIT 1').bind(owner,id).first():null;
-  return {...result,profileResourceId:asset.id,...(previous?{job:rpPublicJob(previous)}:await queueReferenceAnalysis(env,owner,id))};
+  return {...result,profileResourceId:asset.id,...(previous?{job:rpPublicJob(previous)}:await queueReferenceAnalysis(env,owner,id,loaded))};
  }catch(error){return {...result,profileResourceId:asset.id,queueError:error.message};}
 }
 export async function validateProfileBindings(env,owner,state){
@@ -61,11 +61,11 @@ async function rpCommit(env,owner,loaded,profile,hash,old,assets=[]){
  const result=await env.DB.batch(statements);if(!result[0].meta.changes||!result[1].meta.changes)throw fail(409,'Dự án vừa thay đổi. Tải lại và thử lại; chưa ghi đè dữ liệu.');
  return {reference:rpSummary(profile,hash),profileRevision:(old?.revision||0)+1,revision};
 }
-export async function referenceProfileApi(request,env,owner){
+export async function referenceProfileApi(request,env,owner,loadedSnapshot){
  const url=new URL(request.url),parts=url.pathname.split('/').filter(Boolean),id=parts[2];
  if(parts.length===2&&request.method==='GET'){const hash=url.searchParams.get('importHash');if(!hash||!/^[a-f0-9]{64}$/.test(hash))throw fail(400,'Cần hash nhập hợp lệ.');const row=await env.DB.prepare('SELECT id FROM reference_profiles WHERE owner = ? AND import_hash = ?').bind(owner,hash).first();return json({id:row?.id||null});}
  if(parts.length===2&&request.method==='POST'){
-  const b=await body(request),loaded=await readState(env,owner);if(loaded.revision!==b.expectedRevision)throw fail(409,'Dự án vừa thay đổi. Tải lại rồi nhập.');
+  const b=await body(request),loaded=loadedSnapshot||await readState(env,owner);if(loaded.revision!==b.expectedRevision)throw fail(409,'Dự án vừa thay đổi. Tải lại rồi nhập.');
   if(!b.profile||!/^[a-f0-9]{64}$/.test(b.profile.importHash||''))throw fail(400,'Thiếu dấu kiểm tra gói nhập.');
   const duplicate=await env.DB.prepare('SELECT id FROM reference_profiles WHERE owner = ? AND import_hash = ?').bind(owner,b.profile.importHash).first();if(duplicate)return json({alreadyImported:true,id:duplicate.id});
   const assets=b.assets;if(!Array.isArray(assets)||assets.length>300)throw fail(400,'Danh sách ảnh nhập không hợp lệ.');
@@ -106,8 +106,8 @@ export async function hydrateReferenceResources(env,owner,state,episode,resource
 }
 const rpPublicJob=row=>({id:row.id,taskId:'reference:'+row.id,type:'reference_analysis',referenceId:row.reference_id,status:row.status,sourceHash:row.source_hash,leaseUntil:row.lease_until,progress:row.progress,createdAt:row.created_at});
 export async function listReferenceJobs(env,owner){const rows=await env.DB.prepare('SELECT id,reference_id,status,source_hash,lease_until,progress,created_at FROM reference_jobs WHERE owner = ? ORDER BY created_at DESC LIMIT 50').bind(owner).all();return rows.results.map(rpPublicJob);}
-export async function queueReferenceAnalysis(env,owner,id){
- const row=await rpRow(env,owner,id),loaded=await readState(env,owner),profile=JSON.parse(row.data);
+export async function queueReferenceAnalysis(env,owner,id,loadedSnapshot){
+ const row=await rpRow(env,owner,id),loaded=loadedSnapshot||await readState(env,owner),profile=JSON.parse(row.data);
  if(!loaded.state.references.some(r=>r.id===id))throw fail(404,'Hồ sơ đã được gỡ.');
  const prior=await env.DB.prepare("SELECT * FROM reference_jobs WHERE owner = ? AND reference_id = ? AND source_hash = ? AND status IN ('queued','running') ORDER BY created_at DESC LIMIT 1").bind(owner,id,row.source_hash).first();if(prior)return {job:rpPublicJob(prior)};
  delete profile.analysis;delete profile.sourceCsv;const ids=new Set(profile.shots.map(s=>s.imageId)),assets=loaded.state.assets.filter(a=>ids.has(a.id));if(assets.length!==ids.size)throw fail(409,'Một số ảnh đã bị gỡ.');
