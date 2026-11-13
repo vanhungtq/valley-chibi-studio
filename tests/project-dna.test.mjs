@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {referenceFixture,importReferenceFixture,referenceOwner,referenceAnalysisFixture} from './reference-fixture.mjs';
-import {configureProjectDna,readProjectDna,validateDnaPatterns} from '../worker/project-dna.js';
+import {configureProjectDna,readProjectDna,validateDnaPatterns,dnaProductionResources} from '../worker/project-dna.js';
 import {readState,saveState} from '../worker/api.js';
 import {queueReferenceAnalysis,referenceAnalysisAction} from '../worker/reference-profiles.js';
 import {queueTask,getTask,claimTask} from '../worker/bridge.js';
@@ -26,4 +26,19 @@ test('DNA configuration respects revision and active production leases; imported
  const f=await referenceFixture(),task=await queueTask(f.env,referenceOwner,'ep-01');await claimTask(f.env,referenceOwner,task.id);
  await assert.rejects(configureProjectDna(f.env,referenceOwner,{config:dnaConfig,expected_revision:1}),e=>e.status===409);assert.equal((await readState(f.env,referenceOwner)).state.project.dnaConfig,undefined);
  const rendered=projectDnaView({configured:true,status:'awaiting_sources',title:'x',config:{...dnaConfig,ownerBrief:'<img src=x onerror=1>'},sources:[],principles:[],setups:[],recipes:[]},(await readState(f.env,referenceOwner)).state);assert.ok(!rendered.includes('<img src=x'));assert.match(rendered,/&lt;img/);
+});
+
+test('owner filters retrieve thematic principles while keeping their single-source authority',async()=>{
+ const f=await referenceFixture(),{profile}=await importReferenceFixture(f),extra={...structuredClone(profile),id:crypto.randomUUID(),title:'Craft reference',url:'https://example.test/craft',importHash:'d'.repeat(64),videoTypes:['Thủ công'],shots:profile.shots.map(s=>({...s,sceneTypes:['Dệt sợi']}))};
+ const imported=await f.api('/api/reference-profiles',{method:'POST',body:JSON.stringify({profile:extra,assets:[],expectedRevision:(await readState(f.env,referenceOwner)).revision})});assert.equal(imported.status,201);
+ await configureProjectDna(f.env,referenceOwner,{config:{...dnaConfig,anchorReferenceId:profile.id},expected_revision:(await readState(f.env,referenceOwner)).revision});
+ for(const source of [profile,extra]){
+  const job=await queueReferenceAnalysis(f.env,referenceOwner,source.id),claim=await referenceAnalysisAction(f.env,referenceOwner,{action:'claim',job_id:job.job.id}),analysis=referenceAnalysisFixture(source);
+  analysis.dna=source.id===profile.id?dnaFixture():{version:'1.0',principles:[{...dnaFixture().principles[0],key:'thin_fiber_light',sceneTypes:['Dệt sợi']}],setups:[],recipes:[]};
+  await referenceAnalysisAction(f.env,referenceOwner,{action:'submit',job_id:job.job.id,claim_token:claim.claimToken,analysis});
+ }
+ const state=(await readState(f.env,referenceOwner)).state,episode=state.episodes[0],get=selection=>dnaProductionResources(f.env,referenceOwner,state,{...episode,referenceSelection:selection},{assets:[],references:[]}),has=r=>r.dna.principles.some(p=>p.key==='thin_fiber_light');
+ assert.equal(has(await get({videoTypes:[],sceneTypes:[]})),false);
+ const matched=await get({videoTypes:['Thủ công'],sceneTypes:['Dệt sợi']});assert.equal(has(matched),true);assert.equal(matched.dna.principles.find(p=>p.key==='thin_fiber_light').core,false);assert.equal(matched.dna.principles.find(p=>p.key==='thin_fiber_light').authority,'single_source');
+ assert.equal(has(await get({videoTypes:['Thủ công'],sceneTypes:['Nấu ăn']})),false);assert.equal(has(await get({videoTypes:['Nấu ăn'],sceneTypes:['Dệt sợi']})),false);assert.equal(has(await get({videoTypes:['Thủ công'],sceneTypes:[]})),true);
 });

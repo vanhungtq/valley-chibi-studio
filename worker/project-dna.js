@@ -86,7 +86,8 @@ export async function dnaProductionResources(env,owner,state,episode,resources){
  const dna=await readProjectDna(env,owner,state);if(!dna.signature||!['ready','partial'].includes(dna.status))return resources;
  const chosen=episode.referenceSelection?.sceneTypes||[],matches=p=>!chosen.length||!p.sceneTypes.length||p.sceneTypes.some(t=>chosen.some(c=>referenceKey(t)===referenceKey(c)));
  const videoTypes=episode.referenceSelection?.videoTypes||[],videoMatches=p=>!videoTypes.length||p.videoTypes.some(t=>videoTypes.some(v=>referenceKey(t)===referenceKey(v)));
- const selected={title:dna.title,status:dna.status,signature:dna.signature,mode:dna.mode,anchorReferenceId:dna.anchorReferenceId,principles:dna.principles.filter(p=>p.core),setups:dna.setups.filter(p=>matches(p)&&(p.core||(chosen.length||videoTypes.length)&&videoMatches(p))),recipes:dna.recipes.filter(p=>matches(p)&&videoMatches(p))};
+ const thematic=p=>Boolean(chosen.length||videoTypes.length)&&matches(p)&&videoMatches(p);
+ const selected={title:dna.title,status:dna.status,signature:dna.signature,mode:dna.mode,anchorReferenceId:dna.anchorReferenceId,principles:dna.principles.filter(p=>p.core||thematic(p)),setups:dna.setups.filter(p=>matches(p)&&(p.core||thematic(p))),recipes:dna.recipes.filter(p=>matches(p)&&videoMatches(p))};
  const evidence=[...selected.principles,...selected.setups,...selected.recipes].flatMap(p=>p.evidence),ids=new Set(evidence.map(e=>e.imageId)),assets=[...resources.assets];for(const asset of state.assets)if(ids.has(asset.id)&&!assets.some(a=>a.id===asset.id))assets.push(asset);
  if(dnaBytes({...resources,assets,dna:selected})>1536*1024)throw fail(413,'DNA/reference quá lớn cho gói viết kịch bản. Chọn phân cảnh cụ thể hơn.');
  return {...resources,assets,dna:selected};

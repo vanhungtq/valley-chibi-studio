@@ -43,6 +43,8 @@ Khi tạo/sửa brief hoặc chạy quy trình, chọn các loại video/phân c
 
 `match_reference_layout` ưu tiên dùng bố cục/setup tương ứng làm mẫu và thay bằng bối cảnh, nhân vật, đạo cụ của chủ dự án. Agent phải đối chiếu nguồn thật của dự án, giữ ID và ghi key DNA + reference/shot đã áp dụng. `adapt_layout` cho phép đề xuất bố cục mới. DNA không thay ảnh hiện trạng hay danh tính nhân vật của dự án.
 
+Nguyên tắc riêng của một nguồn được đưa vào gói làm việc khi khớp dạng video/phân cảnh chủ dự án đã chọn. Nó vẫn giữ nhãn `single_source`; việc truy xuất không tự nâng thành nguyên tắc chung. Khi chưa chọn chủ đề, chỉ các nguyên tắc chung/nguồn chuẩn được lấy mặc định.
+
 Mở kho để xem mẫu, xem ảnh nguồn, hoặc tải JSON. Cấu hình/kiến thức nằm trong dữ liệu riêng của chủ dự án; không đưa phân tích thực tế và ảnh tải lên vào repo mã nguồn công khai.
 
 ## MCP và tương thích phiên cũ
