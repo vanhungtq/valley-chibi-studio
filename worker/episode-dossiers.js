@@ -56,7 +56,8 @@ export function validateEpisodeDossiers(state){
     if(!shot||!dossierId(shot.shotId)||shots.has(shot.shotId)||!dossierId(shot.sceneId)||!dossierText(shot.sceneTitle,300)||!shot.sceneTitle.trim()||!Number.isInteger(shot.seconds)||shot.seconds<1||shot.seconds>600||shot.start!==elapsed||shot.end!==elapsed+shot.seconds||!Number.isInteger(shot.page)||shot.page<1||shot.page>150||!Number.isInteger(shot.panel)||shot.panel<1||shot.panel>4||!Number.isFinite(shot.lensMm)||shot.lensMm<1||shot.lensMm>2000||['timecode','size','angle','move','action','continuity','sound','lighting','aperture','recording','techniqueRefs'].some(k=>!dossierText(shot[k])))throw fail(400,'ID, timeline hoặc thông tin shot không hợp lệ.');
     shots.set(shot.shotId,shot);elapsed=shot.end;
    }
-   if(Math.abs(elapsed-dossier.targetMinutes*60)>dossier.targetMinutes*3)throw fail(400,'Thời lượng shotlist phải khớp mục tiêu của bản hồ sơ (±5%).');
+   if(dossier.targetSeconds!==undefined){if(!Number.isInteger(dossier.targetSeconds)||dossier.targetSeconds<1||dossier.targetSeconds>14400||elapsed!==dossier.targetSeconds||dossier.targetMinutes!==Math.max(1,Math.round(dossier.targetSeconds/60)))throw fail(400,'Thời lượng riêng của hồ sơ phải khớp chính xác timeline CSV.');}
+   else if(Math.abs(elapsed-dossier.targetMinutes*60)>dossier.targetMinutes*3)throw fail(400,'Thời lượng shotlist phải khớp mục tiêu của bản hồ sơ (±5%).');
    if(!Array.isArray(dossier.gallery)||dossier.gallery.length>150)throw fail(400,'Danh sách ảnh storyboard không hợp lệ.');
    const covered=new Set(),pages=new Set(),imageIds=new Set();
    for(const item of dossier.gallery){
@@ -77,7 +78,9 @@ export async function publishEpisodeDossier(env,owner,args){
  if(!env.MCP_OAUTH||env.MCP_IDENTITY?.id!==owner||!/^github:\d+$/.test(owner))throw fail(403,'Cần kết nối MCP Cloudflare của chủ Xưởng để trình bày hồ sơ.');
  if(!dossierId(args.episode_id)||!dossierId(args.dossier_id)||!Number.isInteger(args.expected_revision)||!Array.isArray(args.gallery)||args.gallery.some(g=>!g||typeof g.asset_id!=='string'||!Array.isArray(g.shot_ids))||!args.file_ids)throw fail(400,'Thiếu ID tập, ID phiên bản, revision hoặc tệp hồ sơ.');
  if(args.refresh_gallery_labels!==undefined&&typeof args.refresh_gallery_labels!=='boolean')throw fail(400,'Tùy chọn nhãn ảnh phải là bật hoặc tắt.');
+ if(args.target_seconds!==undefined&&(!Number.isInteger(args.target_seconds)||args.target_seconds<1||args.target_seconds>14400))throw fail(400,'Thời lượng riêng của hồ sơ cần 1–14400 giây.');
  const request={episodeId:args.episode_id,id:args.dossier_id,title:args.title,version:args.version,summary:args.summary||'',files:args.file_ids,gallery:args.gallery,visualBibleId:args.visual_bible_id||null,refreshGalleryLabels:args.refresh_gallery_labels===true};
+ if(args.target_seconds!==undefined)request.targetSeconds=args.target_seconds;
  const hash=await dossierHash(request),loaded=await readState(env,owner),episode=loaded.state.episodes.find(e=>e.id===args.episode_id);
  if(!episode)throw fail(404,'Không tìm thấy tập phim.');
  const existing=episode.dossiers?.find(d=>d.id===args.dossier_id);
@@ -87,7 +90,7 @@ export async function publishEpisodeDossier(env,owner,args){
  if(csv.size>1024*1024)throw fail(413,'Shotlist CSV vượt giới hạn 1 MiB.');
  const object=await env.BUCKET.get(csv.key);if(!object)throw fail(503,'Shotlist đang đồng bộ trong KV. Chờ rồi thử lại.');
  const shots=parseDossierCsv(await object.text());
- const dossier={...request,targetMinutes:episode.targetMinutes||Math.round(shots.reduce((n,s)=>n+s.seconds,0)/60),shots,gallery:args.gallery.map(g=>({assetId:g.asset_id,shotIds:g.shot_ids,page:shots.find(s=>s.shotId===g.shot_ids?.[0])?.page})),publishedAt:new Date().toISOString(),requestHash:hash};
+ const dossier={...request,targetMinutes:args.target_seconds===undefined?(episode.targetMinutes||Math.round(shots.reduce((n,s)=>n+s.seconds,0)/60)):Math.max(1,Math.round(args.target_seconds/60)),shots,gallery:args.gallery.map(g=>({assetId:g.asset_id,shotIds:g.shot_ids,page:shots.find(s=>s.shotId===g.shot_ids?.[0])?.page})),publishedAt:new Date().toISOString(),requestHash:hash};
  delete dossier.episodeId;
  (episode.dossiers??=[]).push(dossier);validateEpisodeDossiers(loaded.state);
  if(args.refresh_gallery_labels===true)for(const item of dossier.gallery){const asset=loaded.state.assets.find(a=>a.id===item.assetId);asset.description=dossier.title+' · Storyboard AI · bảng '+item.page+' · '+item.shotIds.join(' · ')+'.';}

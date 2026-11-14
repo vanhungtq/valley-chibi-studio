@@ -25,3 +25,5 @@ Nếu chủ Xưởng yêu cầu chuẩn hóa nhãn ảnh đang nhập cho phiên
 Phiên MCP giữ danh mục cũ đọc `episodeDossier` trong `studio_get_project`, rồi dùng `studio_save_artifact`: `task_id="episode:<episodeId>"`, `claim_token=""`, `mime="application/json"`, `encoding="utf8"`, `filename="episode-dossier.json"`. `content` là JSON gồm `protocol="valley-episode-dossier/1"` và các trường ở bước 3 trừ `episode_id` (lấy từ namespace). Đây là thao tác chủ Xưởng tổ chức hồ sơ, không phải nhận hay nộp task. UUID task bình thường giữ nguyên mọi kiểm tra claim.
 
 File luôn dùng đăng nhập App; không công khai tài liệu, không đưa dữ liệu dự án vào source GitHub và không dùng API mô hình.
+
+Bản hồ sơ có thể giữ thời lượng khác tập đang làm: gửi `target_seconds` bằng tổng giây CSV. Máy chủ kiểm tra timeline khớp chính xác, lưu thời lượng riêng của phiên bản và giữ nguyên mục tiêu/quy trình tập. Bỏ trường này giữ kiểm tra mục tiêu tập ±5% như trước. Giao diện hiển thị tổng thời lượng shotlist dạng phút:giây.

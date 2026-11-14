@@ -57,6 +57,16 @@ test('CSV parser handles BOM and multiline quotes, and rejects malformed or ambi
  assert.equal(parseDossierCsv(dossierCsv)[0].shotId,'S01');
  for(const text of ['shotId,shotId\nS01,S02',dossierCsv+'"unclosed',dossierCsv.replace('First, action','First, action"x')])assert.throws(()=>parseDossierCsv(text));
 });
+test('an imported edition keeps its exact CSV duration without changing the working episode target',async()=>{
+ const f=await dossierFixture(),before=await readState(f.env,dossierOwner);before.state.episodes[0].targetMinutes=30;await saveState(f.env,dossierOwner,before.state,before.revision);
+ const args={...f.args,expected_revision:2,target_seconds:60};
+ await assert.rejects(publishEpisodeDossier(f.env,dossierOwner,{...args,target_seconds:61}),e=>e.status===400);
+ for(const target_seconds of [0,14401,60.5,'60'])await assert.rejects(publishEpisodeDossier(f.env,dossierOwner,{...args,target_seconds}),e=>e.status===400);
+ const result=await publishEpisodeDossier(f.env,dossierOwner,args);assert.equal(result.dossier.targetSeconds,60);assert.equal(result.dossier.targetMinutes,1);
+ const after=await readState(f.env,dossierOwner);assert.equal(after.state.episodes[0].targetMinutes,30);assert.deepEqual(after.state.episodes[0].outputs,before.state.episodes[0].outputs);assert.equal((await publishEpisodeDossier(f.env,dossierOwner,args)).alreadyPublished,true);
+ assert.match(dossierDetail(after.state,{episodeId:'ep-01',dossierId:'v2-0'}),/Thời lượng shotlist/);
+ const saved=await handleApi(new Request('https://studio.test/api/state',{method:'PUT',headers:{'content-type':'application/json','oai-authenticated-user-id':dossierOwner},body:JSON.stringify(after)}),f.env);assert.equal(saved.status,200);
+});
 test('owner can explicitly refresh gallery labels from real CSV IDs including inserted letter suffixes',async()=>{
  const f=await dossierFixture(),csv=f.state.assets.find(a=>a.id===f.files.shotlist);f.store.set(csv.key,dossierCsv.replace('S02,SC01','S01A,SC01'));
  f.args.gallery[0].shot_ids=['S01','S01A'];f.args.refresh_gallery_labels=true;
